@@ -90,6 +90,12 @@ Preserve the accessibility baseline:
 - Reusable client behavior belongs in `frontend/src/app/hooks/` or
   `frontend/src/app/lib/`, with a colocated `*.test.ts` or `*.test.tsx` file.
 - Use the `@/` alias for imports rooted at `frontend/src/`.
+- Production frontend code must not import anything outside `frontend/`
+  except through a `paths` alias in `frontend/tsconfig.json` whose target
+  `frontend/Dockerfile` copies into the image. Test files may import shared
+  fixtures and add-in sources because `frontend/tsconfig.build.json` keeps
+  them out of `next build`; `frontend/src/__tests__/architecture.test.ts`
+  enforces both rules.
 
 Do not expose raw backend, database, provider, or stack errors in the UI. Map
 known 4xx responses to intentional messages and use the generic fallback
@@ -191,6 +197,7 @@ npm run build --prefix backend
 npm test --prefix frontend
 npm run test:coverage --prefix frontend
 npm run lint --prefix frontend
+npm run typecheck --prefix frontend
 npm run build --prefix frontend
 
 npm run typecheck --prefix word-addin
@@ -201,6 +208,14 @@ npm run test:e2e
 npm run test:e2e:local
 npm run test:stack --prefix backend
 ```
+
+A change to a Dockerfile, a `.dockerignore`, a tsconfig, or an import that
+crosses an application boundary must be verified by building the affected
+image from the repository root, for example
+`docker build -f frontend/Dockerfile .`. The host-side build cannot catch a
+missing build-context file because every sibling directory exists on the
+host; `.github/workflows/docker-images.yml` builds all three images on every
+pull request for the same reason.
 
 Use targeted Vitest files while iterating, for example:
 
