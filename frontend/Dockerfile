@@ -6,6 +6,8 @@ COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 COPY packages/contracts /packages/contracts
+# Next.js also type-checks tests that import the shared PDF ordering fixtures.
+COPY packages/pdf-text-order /packages/pdf-text-order
 COPY word-addin/src /word-addin/src
 
 RUN npm run build
