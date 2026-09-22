@@ -66,7 +66,8 @@ function importSpecifiers(file: string): string[] {
 const isTestOnly = (rel: string) =>
     /\.test\.tsx?$/.test(rel) ||
     /(^|\/)__tests__\//.test(rel) ||
-    /^vitest\.(config|setup)\.ts$/.test(rel);
+    rel === "vitest.config.mts" ||
+    rel === "vitest.setup.ts";
 
 // The Dockerfile, reduced to what matters here: where the frontend lands in
 // the image and which repository paths are copied where.
