@@ -5,6 +5,7 @@
 
 import { isPanelDocument } from "@/app/components/shared/types";
 import { authenticatedFetch } from "@/app/lib/authEvents";
+import { reportApiFailure, reportNetworkFailure } from "@/app/lib/errorReporting";
 import {
     UploadBatchError,
     createControlRequestRetryPolicy,
@@ -86,7 +87,33 @@ interface ServerChatDetailOut {
 }
 
 export const API_BASE = "/api";
-const apiFetch: typeof fetch = authenticatedFetch;
+/**
+ * Every API call goes through here so a transport failure (the request
+ * never got an HTTP response) is reported once, tagged with the endpoint,
+ * before it propagates as the bare TypeError the browser throws.
+ */
+const apiFetch: typeof fetch = async (input, init) => {
+    try {
+        return await authenticatedFetch(input, init);
+    } catch (error) {
+        // Stopping a stream or leaving a screen is expected. Abort reasons
+        // may be arbitrary values, so the signal also covers custom reasons.
+        if (
+            init?.signal?.aborted ||
+            (typeof error === "object" &&
+                error !== null &&
+                "name" in error &&
+                error.name === "AbortError")
+        ) {
+            throw error;
+        }
+        reportNetworkFailure(error, {
+            method: init?.method ?? "GET",
+            url: String(input),
+        });
+        throw error;
+    }
+};
 const isDev = process.env.NODE_ENV !== "production";
 const devLog = (...args: Parameters<typeof console.log>) => {
     if (isDev) console.log(...args);
@@ -135,7 +162,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     });
 
     if (!response.ok) {
-        throw await toApiError(response, path);
+        throw await toApiError(response, path, restInit.method ?? "GET");
     }
 
     if (
@@ -203,7 +230,11 @@ async function apiBlobRequest(path: string): Promise<{
     };
 }
 
-async function toApiError(response: Response, path: string) {
+async function toApiError(
+    response: Response,
+    path: string,
+    method = "GET",
+) {
     const text = await response.text();
     try {
         const parsed = JSON.parse(text) as {
@@ -221,7 +252,7 @@ async function toApiError(response: Response, path: string) {
             code: parsed.code,
             requestId,
         });
-        return new MikeApiError({
+        const apiError = new MikeApiError({
             status: response.status,
             code: typeof parsed.code === "string" ? parsed.code : null,
             requestId,
@@ -240,13 +271,27 @@ async function toApiError(response: Response, path: string) {
                       ? parsed.detail
                       : MALFORMED_ERROR_RESPONSE_MESSAGE,
         });
+        // 4xx are intentional answers (validation, permissions) and are
+        // shown to the user; 5xx are failures worth an alert, correlated to
+        // the backend's own event by request id.
+        if (response.status >= 500) {
+            reportApiFailure({
+                path,
+                method,
+                status: response.status,
+                code: apiError.code,
+                requestId,
+                error: apiError,
+            });
+        }
+        return apiError;
     } catch {
         devLog("[mike-api] non-ok non-json response", {
             path,
             status: response.status,
             requestId: response.headers.get("x-request-id"),
         });
-        return new MikeApiError({
+        const apiError = new MikeApiError({
             status: response.status,
             requestId: response.headers.get("x-request-id"),
             message:
@@ -254,6 +299,16 @@ async function toApiError(response: Response, path: string) {
                     ? INTERNAL_ERROR_MESSAGE
                     : MALFORMED_ERROR_RESPONSE_MESSAGE,
         });
+        if (response.status >= 500) {
+            reportApiFailure({
+                path,
+                method,
+                status: response.status,
+                requestId: apiError.requestId,
+                error: apiError,
+            });
+        }
+        return apiError;
     }
 }
 

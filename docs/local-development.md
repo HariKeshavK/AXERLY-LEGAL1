@@ -146,6 +146,15 @@ review where the model may run across many cells.
 Use synthetic or public documents until you have reviewed the deployment and
 data flows. See [Safe local testing](safe-local-testing.md) for guidance.
 
+## Error tracking locally
+
+Error reporting is enabled by default using Mike's community Sentry project.
+Set `SENTRY_DISABLED=true` to opt out on the backend, and use
+`NEXT_PUBLIC_SENTRY_DISABLED=true` or `REACT_APP_SENTRY_DISABLED=true` for the
+web app or Word add-in. To watch events locally instead, run
+`node scripts/sentry-sink.mjs` and point each runtime's DSN at it; see
+[observability.md](observability.md).
+
 ## Running application code without Docker
 
 To run the frontend and backend processes directly while using separately
