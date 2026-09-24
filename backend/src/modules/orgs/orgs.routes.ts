@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // Express router for organizations + RBAC, mounted at /orgs.
 //
 // Thin handlers: they read res.locals (userId/userEmail set by requireAuth),
@@ -15,13 +15,13 @@ import { Router } from "express";
 import { requireAuth } from "../../middleware/auth";
 import { asyncRoute, routerErrorHandler } from "../../middleware/asyncRoute";
 import { createDatabase } from "../../lib/database";
+import { can } from "../../lib/authz";
 import { sendOrgFailure } from "../../lib/orgFailure";
 import {
     listMyOrgs,
     createOrg,
     getOrg,
     updateOrg,
-    deleteOrg,
     listOrgResources,
     listMembers,
     updateMember,
@@ -43,14 +43,20 @@ orgsRouter.get("/", requireAuth, asyncRoute(async (_req, res) => {
     res.json(result.orgs);
 }));
 
-// POST /orgs — create an org; the caller becomes its first admin.
-orgsRouter.post("/", requireAuth, asyncRoute(async (req, res) => {
-    const userId = res.locals.userId as string;
-    const db = createDatabase();
-    const result = await createOrg(db, { userId, name: req.body?.name });
-    if (!result.ok) return sendOrgFailure(res, result);
-    res.status(201).json(result.org);
-}));
+// P6 will provide the licensed production setup route. Until then, only a
+// development bootstrap administrator may create the initial firm.
+if (process.env.NODE_ENV !== "production") {
+    orgsRouter.post("/", requireAuth, asyncRoute(async (req, res) => {
+        if (!can({ id: res.locals.userId as string, role: res.locals.userRole as "admin" | "member", status: "active" }, "admin", { kind: "system" }))
+            return void res.status(404).json({ detail: "Not found" });
+        const result = await createOrg(createDatabase(), {
+            userId: res.locals.userId as string,
+            name: req.body?.name,
+        });
+        if (!result.ok) return sendOrgFailure(res, result);
+        res.status(201).json(result.org);
+    }));
+}
 
 // GET /orgs/:orgId — org detail (any member).
 orgsRouter.get("/:orgId", requireAuth, asyncRoute(async (req, res) => {
@@ -72,20 +78,6 @@ orgsRouter.patch("/:orgId", requireAuth, asyncRoute(async (req, res) => {
     });
     if (!result.ok) return sendOrgFailure(res, result);
     res.json(result.org);
-}));
-
-// DELETE /orgs/:orgId — delete an empty org (admin only). Organization-owned
-// resources never become personal data as a side effect of deletion.
-orgsRouter.delete("/:orgId", requireAuth, asyncRoute(async (req, res) => {
-    const userId = res.locals.userId as string;
-    const db = createDatabase();
-    const result = await deleteOrg(db, {
-        userId,
-        userEmail: res.locals.userEmail as string | undefined,
-        orgId: req.params.orgId,
-    });
-    if (!result.ok) return sendOrgFailure(res, result);
-    res.status(204).send();
 }));
 
 // GET /orgs/:orgId/resources — every organization-scoped project and workflow.

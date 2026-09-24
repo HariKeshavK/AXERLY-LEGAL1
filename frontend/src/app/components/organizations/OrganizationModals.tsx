@@ -1,19 +1,17 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RotateCw, Trash2, X } from "lucide-react";
+import { Loader2, RotateCw, X } from "lucide-react";
 import { AddUserInput } from "@/app/components/shared/AddUserInput";
 import { Modal } from "@/app/components/modals/Modal";
 import { ModalSelect } from "@/app/components/modals/ModalSelect";
-import { ConfirmPopup } from "@/app/components/popups/ConfirmPopup";
 import { WarningPopup } from "@/app/components/popups/WarningPopup";
 import { FieldLabel, FormTextInput } from "@/app/components/ui/form-field";
-import { PillButtonUI } from "@/shared/ui/PillButtonUI";
 import {
   cancelOrgInvitation,
   createOrg,
   createOrgInvitation,
-  deleteOrg,
   resendOrgInvitation,
   updateOrg,
   type Org,
@@ -414,21 +412,14 @@ export function OrganizationSettingsModal({
   org,
   onClose,
   onUpdated,
-  onDeleted,
 }: {
   open: boolean;
   org: Org;
   onClose: () => void;
   onUpdated: (org: Org) => void;
-  onDeleted: () => void;
 }) {
   const [name, setName] = useState(org.name);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  // Two different failures shared one heading: a refused delete was announced
-  // as "Organization settings not saved", which describes the rename this
-  // modal also does and not the thing that actually failed.
   const [error, setError] = useState<{
     title: string;
     message: string;
@@ -445,14 +436,6 @@ export function OrganizationSettingsModal({
     setError(null);
   }, [open, org.name]);
 
-  useEffect(() => {
-    // The confirmation renders in its own portal, so it must retire with the
-    // modal: otherwise it keeps floating over the page after Escape or a
-    // backdrop click, with a live "Delete" button still wired to this org.
-    if (open) return;
-    setConfirmDelete(false);
-  }, [open]);
-
   async function save() {
     if (!trimmedName || !changed || saving) return;
     setSaving(true);
@@ -467,30 +450,6 @@ export function OrganizationSettingsModal({
     } finally {
       setSaving(false);
     }
-  }
-
-  async function remove() {
-    if (deleting) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteOrg(org.id);
-      // The confirmation was reset on failure and not on success, so after a
-      // delete that worked it stayed open — over a page now navigating away,
-      // with a live Delete button still aimed at an organization that no
-      // longer exists. Close it, and leave `deleting` set so the button
-      // cannot fire a second time during the navigation.
-      setConfirmDelete(false);
-      onDeleted();
-      return;
-    } catch (err) {
-      setError({
-        title: "Organization not deleted",
-        message: friendlyError(err, "Could not delete the organization."),
-      });
-      setConfirmDelete(false);
-    }
-    setDeleting(false);
   }
 
   return (
@@ -517,48 +476,15 @@ export function OrganizationSettingsModal({
             <FormTextInput
               id="organization-settings-name"
               value={name}
-              disabled={saving || deleting}
+              disabled={saving}
               onChange={(event) => {
                 setName(event.target.value);
                 setError(null);
               }}
             />
           </div>
-          <div className="border-t border-white/60 pt-5">
-            <p className="text-sm font-medium text-gray-700">
-              Delete organization
-            </p>
-            <p className="mt-1 max-w-md text-xs text-gray-400">
-              Only an empty organization can be deleted. Move or delete its
-              projects, chats, reviews, documents and workflows first.
-            </p>
-            <PillButtonUI
-              tone="danger"
-              size="sm"
-              className="mt-3"
-              disabled={deleting}
-              loading={deleting}
-              onClick={() => setConfirmDelete(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete organization
-            </PillButtonUI>
-          </div>
         </div>
       </Modal>
-      <ConfirmPopup
-        open={open && confirmDelete}
-        title={`Delete ${org.name}?`}
-        message="This removes the empty organization, its memberships and invitations."
-        confirmLabel="Delete"
-        confirmVariant="danger"
-        confirmStatus={deleting ? "loading" : "idle"}
-        onCancel={() => {
-          if (deleting) return;
-          setConfirmDelete(false);
-        }}
-        onConfirm={() => void remove()}
-      />
       <WarningPopup
         open={open && error !== null}
         title={error?.title ?? "Organization settings not saved"}

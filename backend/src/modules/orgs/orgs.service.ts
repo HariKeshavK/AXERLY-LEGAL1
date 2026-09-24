@@ -20,7 +20,6 @@ export {
   createOrg,
   getOrg,
   updateOrg,
-  deleteOrg,
   listOrgResources,
   listMembers,
   updateMember,

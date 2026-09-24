@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check } from "lucide-react";
@@ -34,9 +35,8 @@ import {
 import { ORG_ROLE_LABELS } from "@/app/lib/permissions";
 import { userFacingApiError } from "@/app/lib/userFacingError";
 import { LIQUID_SUBTLE_PANEL_SURFACE_CLASS } from "@/app/components/ui/liquid-surface";
-import { CreateOrganizationModal } from "./OrganizationModals";
 
-type OrganizationFilter = "managed" | "joined" | "invites";
+type OrganizationFilter = "firm" | "invites";
 type OrganizationSortKey = "name" | "members" | "created";
 
 const SORT_OPTIONS: TableFilterOption<TableSortDirection>[] = [
@@ -61,9 +61,8 @@ export function OrganizationsOverview() {
   const [invitations, setInvitations] = useState<OrgInvitation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [invitationsError, setInvitationsError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
   const [activeFilter, setActiveFilter] =
-    useState<OrganizationFilter>("managed");
+    useState<OrganizationFilter>("firm");
   const [sort, setSort] = useState<{
     key: OrganizationSortKey;
     direction: TableSortDirection;
@@ -141,8 +140,7 @@ export function OrganizationsOverview() {
     { id: OrganizationFilter; label: string }[]
   >(
     () => [
-      { id: "managed", label: "Managing" },
-      { id: "joined", label: "Joined" },
+      { id: "firm", label: "Firm" },
       {
         id: "invites",
         // A failed fetch and an empty inbox both left this reading plain
@@ -160,9 +158,7 @@ export function OrganizationsOverview() {
   );
   const visibleOrgs = useMemo(() => {
     if (activeFilter === "invites") return [];
-    const filtered = (orgs ?? []).filter((org) =>
-      activeFilter === "managed" ? org.role === "admin" : org.role !== "admin",
-    );
+    const filtered = orgs ?? [];
     if (!sort) return filtered;
     const multiplier = sort.direction === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
@@ -186,16 +182,9 @@ export function OrganizationsOverview() {
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
         loading={loading}
-        actions={[
-          {
-            type: "new",
-            title: "New organization",
-            onClick: () => setCreateOpen(true),
-          },
-        ]}
       >
         <h1 className="font-serif text-2xl font-medium text-gray-900">
-          Organizations
+          Firm
         </h1>
       </PageHeader>
 
@@ -365,25 +354,14 @@ export function OrganizationsOverview() {
             <TableEmptyState>
               <EmptyState
                 icon={<OrganizationSkeuoIcon />}
-                title="Organizations"
-                description="Create an organization to share projects, chats and reviews with your team."
-                action={
-                  <PillButtonUI
-                    tone="black"
-                    size="sm"
-                    onClick={() => setCreateOpen(true)}
-                  >
-                    Create
-                  </PillButtonUI>
-                }
+                title="Firm not configured"
+                description="Firm setup is completed during first launch."
               />
             </TableEmptyState>
           ) : visibleOrgs.length === 0 ? (
             <TableEmptyState>
               <p className="text-sm text-gray-400">
-                {activeFilter === "managed"
-                  ? "No managed organizations"
-                  : "No joined organizations"}
+                Firm not available
               </p>
             </TableEmptyState>
           ) : (
@@ -423,21 +401,6 @@ export function OrganizationsOverview() {
         </TableScrollArea>
       )}
 
-      <CreateOrganizationModal
-        open={createOpen}
-        // A partly failed creation ("created, but some invitations could not
-        // be sent") leaves the modal open on a real organization that never
-        // reached onCreated. Refetching on dismissal is what makes that
-        // organization appear here instead of only after a reload.
-        onClose={() => {
-          setCreateOpen(false);
-          void load();
-        }}
-        onCreated={(org) => {
-          setCreateOpen(false);
-          router.push(`/organizations/${org.id}`);
-        }}
-      />
       <WarningPopup
         open={invitationError !== null}
         title="Invitation not updated"

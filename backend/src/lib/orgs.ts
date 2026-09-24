@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // Business logic + data-access for the organizations / RBAC module.
 //
 // These functions are the service layer behind modules/orgs/orgs.routes.ts. They take an
@@ -42,12 +42,8 @@ export const INVITATION_TTL_DAYS = 14;
  * Every table that carries its own `org_id` — the complete inventory of what
  * an organization can directly own.
  *
- * ONE list, because two different call sites ask the same question and used
- * to disagree about the answer: `deleteOrg` below (may this org be deleted?)
- * and account deletion (`listOrgsBlockingAccountDeletion` in
- * lib/userDataCleanup.ts). The account-deletion probe omitted `chats`, so an
- * org whose only remaining content was a chat looked empty and was deleted —
- * while `deleteOrg` refused the very same delete over the API.
+ * Account deletion uses this complete list when deciding whether a sole
+ * firm admin can leave. The firm itself is never deleted through an API.
  *
  * Every one of these foreign keys is ON DELETE RESTRICT, so an incomplete
  * probe does not silently detach content: the database refuses the delete and
@@ -162,11 +158,21 @@ export async function createOrg(
     if (!name)
         return { ok: false, kind: "validation", detail: "name is required" };
 
+    const { data: existing, error: lookupError } = await db
+        .from("organizations")
+        .select("id")
+        .limit(1);
+    if (lookupError) return { ok: false, kind: "db_error", detail: lookupError.message };
+    if ((existing ?? []).length > 0)
+        return { ok: false, kind: "conflict", detail: "This installation already has a firm." };
+
     const { data: org, error } = await db
         .from("organizations")
         .insert({ name, created_by: params.userId })
         .select("*")
         .single();
+    if (error?.code === "23505")
+        return { ok: false, kind: "conflict", detail: "This installation already has a firm." };
     if (error || !org)
         return {
             ok: false,
@@ -229,62 +235,6 @@ export async function updateOrg(
             detail: error?.message ?? "Failed to update organization",
         };
     return { ok: true, org: { ...org, role } };
-}
-
-export async function deleteOrg(
-    db: Db,
-    params: { userId: string; userEmail?: string | null; orgId: string },
-): Promise<OrgResult<Record<never, never>>> {
-    const role = await getOrgRole(params.userId, params.orgId, db);
-    if (!role) return { ok: false, kind: "not_found" };
-    if (!isOrgAdmin(role)) return { ok: false, kind: "forbidden" };
-
-    const { data: org } = await db
-        .from("organizations")
-        .select("id, name")
-        .eq("id", params.orgId)
-        .maybeSingle();
-    if (!org) return { ok: false, kind: "not_found" };
-
-    const inventories = await Promise.all(
-        ORG_CONTENT_TABLES.map(async (table) => ({
-            table,
-            result: await db.from(table).select("id").eq("org_id", params.orgId),
-        })),
-    );
-    const failedInventory = inventories.find((entry) => entry.result.error);
-    if (failedInventory?.result.error)
-        return {
-            ok: false,
-            kind: "db_error",
-            detail: failedInventory.result.error.message,
-        };
-    const resourceCount = inventories.reduce(
-        (count, entry) => count + (entry.result.data?.length ?? 0),
-        0,
-    );
-    if (resourceCount > 0)
-        return {
-            ok: false,
-            kind: "conflict",
-            detail: `This organization still contains ${resourceCount} resource${resourceCount === 1 ? "" : "s"}. Move or delete them before deleting the organization.`,
-        };
-
-    const { error } = await db
-        .from("organizations")
-        .delete()
-        .eq("id", params.orgId);
-    if (error)
-        return { ok: false, kind: "db_error", detail: error.message };
-
-    await recordAudit(db, {
-        userId: params.userId,
-        userEmail: params.userEmail ?? null,
-        action: "org.deleted",
-        title: typeof org.name === "string" ? org.name : null,
-        detail: { org_id: params.orgId },
-    });
-    return { ok: true };
 }
 
 /**

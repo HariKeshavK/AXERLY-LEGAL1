@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,8 +9,6 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listOrgs: vi.fn(),
   listMyOrgInvitations: vi.fn(),
-  createOrg: vi.fn(),
-  createOrgInvitation: vi.fn(),
   acceptOrgInvitation: vi.fn(),
   declineOrgInvitation: vi.fn(),
 }));
@@ -24,8 +23,6 @@ vi.mock("@/app/lib/mikeApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/app/lib/mikeApi")>()),
   listOrgs: mocks.listOrgs,
   listMyOrgInvitations: mocks.listMyOrgInvitations,
-  createOrg: mocks.createOrg,
-  createOrgInvitation: mocks.createOrgInvitation,
   acceptOrgInvitation: mocks.acceptOrgInvitation,
   declineOrgInvitation: mocks.declineOrgInvitation,
 }));
@@ -37,14 +34,6 @@ const ORG = {
   created_at: "2026-09-01T00:00:00.000Z",
   role: "admin" as const,
   member_count: 3,
-};
-
-const JOINED_ORG = {
-  ...ORG,
-  id: "org-joined",
-  name: "Community Legal",
-  role: "member" as const,
-  member_count: 8,
 };
 
 const INVITATION = {
@@ -78,20 +67,6 @@ beforeEach(() => {
   mocks.listMyOrgInvitations.mockResolvedValue([]);
 });
 
-/**
- * ModalUI settles focus on the frame after the dialog opens: the control
- * React auto-focused keeps it, otherwise the first focusable control gets it.
- * Typing before that handoff lands the tail of the text on whichever control
- * wins, so wait until focus has left <body> and sits inside the dialog.
- */
-async function settleModalFocus() {
-  await waitFor(() => {
-    const dialog = screen.getByRole("dialog");
-    expect(document.activeElement).not.toBe(document.body);
-    expect(dialog.contains(document.activeElement)).toBe(true);
-  });
-}
-
 describe("OrganizationsOverview", () => {
   it("renders organizations through the shared table columns and opens a row", async () => {
     const user = userEvent.setup();
@@ -113,55 +88,24 @@ describe("OrganizationsOverview", () => {
     expect(mocks.push).toHaveBeenCalledWith("/organizations/org-1");
   });
 
-  it("creates an organization from the page-header plus action", async () => {
-    const user = userEvent.setup();
-    mocks.createOrg.mockResolvedValue({
-      ...ORG,
-      id: "org-2",
-      name: "New Chambers",
-    });
+  it("does not expose a second-firm creation action", async () => {
     render(<OrganizationsOverview />);
     await screen.findByText("Elite Law LLP");
-
-    await user.click(screen.getByRole("button", { name: "New organization" }));
-    expect(
-      await screen.findByText(/You can also add people later/),
-    ).toBeInTheDocument();
-    await settleModalFocus();
-    await user.type(screen.getByLabelText("Organization name"), "New Chambers");
-    await user.type(
-      screen.getByPlaceholderText("Add member by email…"),
-      "jane@firm.example",
-    );
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
-
-    await waitFor(() =>
-      expect(mocks.createOrg).toHaveBeenCalledWith("New Chambers"),
-    );
-    expect(mocks.createOrgInvitation).toHaveBeenCalledWith(
-      "org-2",
-      "jane@firm.example",
-      "member",
-    );
-    expect(mocks.push).toHaveBeenCalledWith("/organizations/org-2");
+    expect(screen.queryByRole("button", { name: "New organization" })).not.toBeInTheDocument();
   });
 
-  it("separates organizations into Managing and Joined tabs", async () => {
-    const user = userEvent.setup();
-    mocks.listOrgs.mockResolvedValue([ORG, JOINED_ORG]);
+  it("directs an unconfigured installation to first-launch setup", async () => {
+    mocks.listOrgs.mockResolvedValue([]);
     render(<OrganizationsOverview />);
+    expect(await screen.findByText("Firm not configured")).toBeInTheDocument();
+    expect(screen.getByText("Firm setup is completed during first launch.")).toBeInTheDocument();
+  });
 
+  it("shows the same single firm to a member without a separate Joined tab", async () => {
+    mocks.listOrgs.mockResolvedValue([{ ...ORG, role: "member" }]);
+    render(<OrganizationsOverview />);
     expect(await screen.findByText("Elite Law LLP")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Managing" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Invites" })).toBeInTheDocument();
-    expect(screen.queryByText("Community Legal")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Joined" }));
-    expect(screen.getByText("Community Legal")).toBeInTheDocument();
-    expect(screen.queryByText("Elite Law LLP")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Joined" })).not.toBeInTheDocument();
   });
 
   it("shows active invitations and their count under the Invites pill", async () => {
@@ -261,51 +205,4 @@ describe("OrganizationsOverview", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps a partly failed creation from vanishing when the modal is closed", async () => {
-    const user = userEvent.setup();
-    const created = { ...ORG, id: "org-2", name: "New Chambers" };
-    mocks.createOrg.mockResolvedValue(created);
-    mocks.createOrgInvitation.mockRejectedValue(new Error("invite failed"));
-    render(<OrganizationsOverview />);
-    await screen.findByText("Elite Law LLP");
-
-    await user.click(screen.getByRole("button", { name: "New organization" }));
-    await settleModalFocus();
-    await user.type(screen.getByLabelText("Organization name"), "New Chambers");
-    await user.type(
-      screen.getByPlaceholderText("Add member by email…"),
-      "jane@firm.example",
-    );
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
-
-    expect(
-      await screen.findByText("Some invitations were not sent"),
-    ).toBeInTheDocument();
-    expect(mocks.push).not.toHaveBeenCalled();
-
-    // The organization exists on the server but never reached onCreated, so
-    // dismissal has to refetch or the row stays invisible until a reload.
-    mocks.listOrgs.mockResolvedValue([ORG, created]);
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(await screen.findByText("New Chambers")).toBeInTheDocument();
-  });
-
-  it("refuses to dismiss the create modal while the request is in flight", async () => {
-    const user = userEvent.setup();
-    mocks.createOrg.mockReturnValue(new Promise(() => {}));
-    render(<OrganizationsOverview />);
-    await screen.findByText("Elite Law LLP");
-
-    await user.click(screen.getByRole("button", { name: "New organization" }));
-    await settleModalFocus();
-    await user.type(screen.getByLabelText("Organization name"), "New Chambers");
-    await user.click(screen.getByRole("button", { name: "Create" }));
-    await waitFor(() => expect(mocks.createOrg).toHaveBeenCalled());
-
-    await user.keyboard("{Escape}");
-    expect(
-      screen.getByRole("dialog", { name: "New organization" }),
-    ).toBeInTheDocument();
-  });
 });

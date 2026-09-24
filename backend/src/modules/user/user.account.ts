@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 // Account / data deletion (destructive — exact call args + ordering preserved).
 //
 // Service layer behind user.routes.ts — see user.shared.ts for the module's
@@ -37,13 +38,16 @@ export function describeAccountDeletionBlockers(
     const withMembers = named("members");
     if (withMembers)
         sentences.push(
-            `You are the only admin of ${withMembers}. Make another member an admin, or delete the organization, before deleting your account.`,
+            `You are the only admin of ${withMembers}. Make another member an admin before deleting your account.`,
         );
     const withContent = named("content");
     if (withContent)
         sentences.push(
-            `You are the only admin of ${withContent}, which still owns content. Delete or move the organization's projects, workflows, documents and reviews, or delete the organization, before deleting your account.`,
+            `You are the only admin of ${withContent}, which still owns content. Make another member an admin before deleting your account.`,
         );
+    const soleAdmin = named("sole_admin");
+    if (soleAdmin)
+        sentences.push(`You are the only admin of ${soleAdmin}. Assign another admin before deleting your account.`);
     return sentences.join(" ");
 }
 

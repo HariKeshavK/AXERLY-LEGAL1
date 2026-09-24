@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import { captureInlineDocumentCleanup, completeInlineDocumentCleanup } from "../documents/documents.service";
 import { type Db } from "../../lib/database";
 import { assertStorageConfigured, deleteFile, deleteFileBestEffort, listFiles } from "../../lib/storage";
@@ -562,7 +562,7 @@ export type AccountDeletionOrgBlocker = {
      * "content" — nobody else is left, but the org still owns matters, so it
      * cannot be deleted either.
      */
-    reason: "members" | "content";
+    reason: "members" | "content" | "sole_admin";
 };
 
 /**
@@ -632,11 +632,7 @@ export async function listOrgsBlockingAccountDeletion(
             "Failed to load remaining org members",
         );
         const hasOtherMembers = ((otherMembers ?? []) as unknown[]).length > 0;
-        if (!hasOtherMembers && !(await orgOwnsContent(db, m.org_id))) {
-            // Nobody and nothing left: deleteUserOrganizations deletes the
-            // whole org, so this one blocks nothing.
-            continue;
-        }
+        const hasContent = await orgOwnsContent(db, m.org_id);
 
         const { data: org, error: orgError } = await db
             .from("organizations")
@@ -650,7 +646,7 @@ export async function listOrgsBlockingAccountDeletion(
                 typeof (org as { name?: unknown } | null)?.name === "string"
                     ? ((org as { name: string }).name)
                     : "your organization",
-            reason: hasOtherMembers ? "members" : "content",
+            reason: hasOtherMembers ? "members" : hasContent ? "content" : "sole_admin",
         });
     }
     return blockers;
@@ -672,8 +668,8 @@ export async function listOrgsBlockingAccountDeletion(
  *    The throw here is the last line of defence for a caller that reached
  *    this function on its own, so by the time it fires the caller's content
  *    is already gone — which is exactly why the check above it exists.
- *  - An org left with no members and no content at all is deleted, which is
- *    what closing a personal workspace should do.
+ *  - The sole admin cannot delete their account even when the firm is empty:
+ *    the firm row and its join settings belong to the installation.
  *  - Any invitations the user sent lose their inviter reference through the
  *    FK's ON DELETE SET NULL; invitations addressed TO them are cancelled.
  */
@@ -703,43 +699,9 @@ export async function deleteUserOrganizations(
                 .limit(1);
             await throwIfError(otherAdminsError, "Failed to load org admins");
             if (((otherAdmins ?? []) as unknown[]).length === 0) {
-                const { data: otherMembers, error: otherMembersError } =
-                    await db
-                        .from("org_members")
-                        .select("id")
-                        .eq("org_id", m.org_id)
-                        .neq("id", m.id)
-                        .limit(1);
-                await throwIfError(
-                    otherMembersError,
-                    "Failed to load remaining org members",
+                throw new NonRetryableJobError(
+                    `Cannot delete this account while it is the only admin of organization ${m.org_id}`,
                 );
-                const hasOtherMembers =
-                    ((otherMembers ?? []) as unknown[]).length > 0;
-
-                if (hasOtherMembers || (await orgOwnsContent(db, m.org_id))) {
-                    // Unreachable through the API — routes/user.ts refuses
-                    // this account with a 409 before enqueueing anything, and
-                    // deleteUserAccountData re-checks before it destroys a
-                    // single row. Reaching it means the org changed underneath
-                    // a request that was already in flight, so stop here
-                    // rather than improvise a successor.
-                    //
-                    // NonRetryableJobError, not Error: an organization does
-                    // not acquire a second admin because the queue asked
-                    // twenty more times over the next few hours. A plain
-                    // Error burned the whole retry budget re-deriving the
-                    // same refusal and buried the reason under the repeats.
-                    throw new NonRetryableJobError(
-                        `Cannot delete this account while it is the only admin of organization ${m.org_id}`,
-                    );
-                }
-
-                // Nobody and nothing left: the org goes with the account, and
-                // the ON DELETE CASCADE from organizations takes the
-                // membership row with it.
-                await deleteByIds(db, "organizations", [m.org_id]);
-                continue;
             }
         }
 

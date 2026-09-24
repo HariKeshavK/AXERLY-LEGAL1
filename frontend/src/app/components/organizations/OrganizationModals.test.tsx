@@ -1,23 +1,14 @@
+// AXERLY modified 2026-09-24.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MikeApiError, type Org } from "@/app/lib/mikeApi";
+import { type Org } from "@/app/lib/mikeApi";
 import {
   InviteOrganizationMemberModal,
   OrganizationSettingsModal,
 } from "./OrganizationModals";
 
-// What this file pins:
-//
-//   1. A success notice that is quietly contradicted by the list beside it.
-//      The invitation was sent; the follow-up refresh failed into a console
-//      line; the pending list stayed as it was — so "Invitation sent" read as
-//      "…and nothing happened".
-//   2. The delete confirmation was reset on FAILURE and not on success, so
-//      after a delete that worked it stayed open over a page navigating away,
-//      with a live Delete button aimed at an organization that is now gone.
-//   3. A refused delete announced itself as "Organization settings not saved",
-//      which describes the rename this modal also does.
+// Invitation mutation feedback and the durable single-firm settings modal.
 
 const mocks = vi.hoisted(() => ({
   createOrgInvitation: vi.fn(),
@@ -123,62 +114,16 @@ describe("InviteOrganizationMemberModal", () => {
 });
 
 describe("OrganizationSettingsModal", () => {
-  it("closes the confirmation once the delete succeeds", async () => {
-    const user = userEvent.setup();
-    const onDeleted = vi.fn();
+  it("allows firm renaming without exposing a delete action", async () => {
     render(
       <OrganizationSettingsModal
         open
         org={org}
         onClose={vi.fn()}
         onUpdated={vi.fn()}
-        onDeleted={onDeleted}
       />,
     );
-
-    await user.click(
-      screen.getByRole("button", { name: "Delete organization" }),
-    );
-    expect(screen.getByText("Delete Elite Law LLP?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-
-    await waitFor(() => expect(onDeleted).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("Delete Elite Law LLP?")).not.toBeInTheDocument();
-    expect(mocks.deleteOrg).toHaveBeenCalledTimes(1);
-  });
-
-  it("names the failure a failed delete, not unsaved settings", async () => {
-    const user = userEvent.setup();
-    mocks.deleteOrg.mockRejectedValue(
-      new MikeApiError({
-        message: "Move or delete this organization's projects first",
-        status: 409,
-      }),
-    );
-    render(
-      <OrganizationSettingsModal
-        open
-        org={org}
-        onClose={vi.fn()}
-        onUpdated={vi.fn()}
-        onDeleted={vi.fn()}
-      />,
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: "Delete organization" }),
-    );
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-
-    expect(
-      await screen.findByText("Organization not deleted"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Move or delete this organization's projects first"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("Organization settings not saved"),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Organization name")).toHaveValue("Elite Law LLP");
+    expect(screen.queryByRole("button", { name: "Delete organization" })).not.toBeInTheDocument();
   });
 });

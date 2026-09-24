@@ -1297,6 +1297,59 @@ export async function listOrgs(): Promise<Org[]> {
     return apiRequest<Org[]>("/orgs");
 }
 
+export interface Team {
+    id: string;
+    org_id: string;
+    name: string;
+    member_count: number;
+    is_member: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TeamMember {
+    user_id: string;
+    email: string;
+    created_at: string;
+}
+
+export async function listTeams(): Promise<Team[]> {
+    return apiRequest<Team[]>("/teams");
+}
+
+export async function createTeam(name: string): Promise<Team> {
+    return apiRequest<Team>("/teams", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+    });
+}
+
+export async function updateTeam(teamId: string, name: string): Promise<Team> {
+    return apiRequest<Team>(`/teams/${teamId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+    });
+}
+
+export async function deleteTeam(teamId: string): Promise<void> {
+    await apiRequest(`/teams/${teamId}`, { method: "DELETE" });
+}
+
+export async function listTeamMembers(teamId: string): Promise<TeamMember[]> {
+    return apiRequest<TeamMember[]>(`/teams/${teamId}/members`);
+}
+
+export async function addTeamMember(teamId: string, userId: string): Promise<void> {
+    await apiRequest(`/teams/${teamId}/members`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+    });
+}
+
+export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+    await apiRequest(`/teams/${teamId}/members/${userId}`, { method: "DELETE" });
+}
+
 export async function createOrg(name: string): Promise<Org> {
     return apiRequest<Org>("/orgs", {
         method: "POST",

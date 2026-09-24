@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 
@@ -258,6 +258,7 @@ vi.mock("../../middleware/auth", () => ({
     ) => {
         res.locals.userId = currentUser.id;
         res.locals.userEmail = currentUser.email;
+        res.locals.userRole = currentUser.id === "admin-1" || currentUser.id === "founder" ? "admin" : "member";
         next();
     },
     requireMfaIfEnrolled: (_req: unknown, _res: unknown, next: () => void) =>
@@ -310,8 +311,10 @@ describe("GET /orgs", () => {
     });
 });
 
-describe("POST /orgs", () => {
-    it("creates the org and makes the caller its first admin", async () => {
+describe("development-only POST /orgs", () => {
+    it("creates only the initial firm and makes the caller its first admin", async () => {
+        tables.organizations = [];
+        tables.org_members = [];
         as("founder", "founder@new.example");
         const res = await request(app)
             .post("/orgs")
@@ -322,6 +325,12 @@ describe("POST /orgs", () => {
         expect(
             tables.org_members.filter((m) => m.user_id === "founder"),
         ).toEqual([expect.objectContaining({ role: "admin" })]);
+    });
+
+    it("refuses a second firm", async () => {
+        const res = await request(app).post("/orgs").set(...AUTH).send({ name: "Second Firm" });
+        expect(res.status).toBe(409);
+        expect(tables.organizations).toHaveLength(1);
     });
 
     it("400s a blank name", async () => {
@@ -423,31 +432,20 @@ describe("organization workspace", () => {
         expect(res.status).toBe(404);
     });
 
-    it("requires an admin to empty an organization before deleting it", async () => {
+    it("does not expose a firm-deletion route", async () => {
         const res = await request(app)
             .delete("/orgs/org-1")
             .set(...AUTH);
-        expect(res.status).toBe(409);
-        expect(res.body.detail).toContain("still contains");
+        expect(res.status).toBe(404);
         expect(tables.organizations).toHaveLength(1);
-
-        tables.projects = [];
-        tables.chats = [];
-        tables.tabular_reviews = [];
-        tables.workflows = [];
-        const emptied = await request(app)
-            .delete("/orgs/org-1")
-            .set(...AUTH);
-        expect(emptied.status).toBe(204);
-        expect(tables.organizations).toEqual([]);
     });
 
-    it("refuses organization deletion to a plain member", async () => {
+    it("does not expose firm deletion to a plain member", async () => {
         as("member-1", "member@firm.example");
         const res = await request(app)
             .delete("/orgs/org-1")
             .set(...AUTH);
-        expect(res.status).toBe(403);
+        expect(res.status).toBe(404);
         expect(tables.organizations).toHaveLength(1);
     });
 });

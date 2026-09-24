@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { describe, expect, it, vi } from "vitest";
 
 // deleteUserAccountData reaches storage on its way through the cascade. The
@@ -300,7 +301,7 @@ describe("deleteUserOrganizations", () => {
         expect(members[0]).toMatchObject({ user_id: "u2", role: "admin" });
     });
 
-    it("deletes an org only when nobody and nothing is left in it", async () => {
+    it("preserves an empty firm and refuses its sole admin's account deletion", async () => {
         const db = makeDb({
             organizations: [{ id: "empty", name: "Empty" }],
             org_members: [
@@ -308,8 +309,8 @@ describe("deleteUserOrganizations", () => {
             ],
             projects: [],
         });
-        await deleteUserOrganizations(db, "u1");
-        expect(db._tables.organizations).toHaveLength(0);
+        await expect(deleteUserOrganizations(db, "u1")).rejects.toBeInstanceOf(NonRetryableJobError);
+        expect(db._tables.organizations).toHaveLength(1);
     });
 
     it("keeps a projectless org that still owns workflows", async () => {
@@ -442,11 +443,7 @@ describe("deleteUserOrganizations", () => {
         ]);
     });
 
-    it("refuses to delete an org because a lookup failed", async () => {
-        // The three org-shaping reads destructured `data` only, so a transient
-        // error read as "no projects here" — and the difference between "this
-        // org holds nothing" and "the database did not answer" is the
-        // difference between tidying up and deleting a firm's tenant.
+    it("refuses to delete a sole admin even when a content lookup would fail", async () => {
         const db = makeDb(
             {
                 organizations: [{ id: "o1", name: "Acme" }],
@@ -458,9 +455,7 @@ describe("deleteUserOrganizations", () => {
             { selectErrors: { projects: "connection reset" } },
         );
 
-        await expect(deleteUserOrganizations(db, "u1")).rejects.toThrow(
-            /Failed to load org projects/,
-        );
+        await expect(deleteUserOrganizations(db, "u1")).rejects.toBeInstanceOf(NonRetryableJobError);
         expect(db._tables.organizations).toHaveLength(1);
     });
 
@@ -523,9 +518,7 @@ describe("listOrgsBlockingAccountDeletion", () => {
         ]);
     });
 
-    it("does not block an empty org with no other members", async () => {
-        // deleteUserOrganizations deletes this one outright, so the account
-        // deletion may proceed.
+    it("blocks an empty firm's sole admin from deleting their account", async () => {
         const db = makeDb({
             organizations: [{ id: "o1", name: "Empty" }],
             org_members: [
@@ -533,9 +526,9 @@ describe("listOrgsBlockingAccountDeletion", () => {
             ],
             projects: [],
         });
-        await expect(listOrgsBlockingAccountDeletion(db, "u1")).resolves.toEqual(
-            [],
-        );
+        await expect(listOrgsBlockingAccountDeletion(db, "u1")).resolves.toEqual([
+            { org_id: "o1", name: "Empty", reason: "sole_admin" },
+        ]);
     });
 
     it("does not block when another admin can take over", async () => {

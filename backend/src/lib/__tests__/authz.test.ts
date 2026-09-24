@@ -17,6 +17,14 @@ describe("central authorization", () => {
     expect(can(member, "share", { kind: "project", accessRole: "owner" })).toBe(true);
   });
 
+  it("treats team membership as a permission principal, not content access", () => {
+    expect(can(member, "read", { kind: "team", accessRole: "viewer" })).toBe(true);
+    expect(can(member, "update", { kind: "team", accessRole: "viewer" })).toBe(false);
+    expect(can(member, "update", { kind: "team", accessRole: "owner" })).toBe(true);
+    expect(can({ ...member, role: "admin" }, "read", { kind: "team" })).toBe(false);
+    expect(can(member, "share", { kind: "team", accessRole: "owner" })).toBe(false);
+  });
+
   it("keeps legacy project capability checks behind the same entry point", () => {
     expect(can("editor", "content.edit")).toBe(true);
     expect(can("viewer", "content.edit")).toBe(false);

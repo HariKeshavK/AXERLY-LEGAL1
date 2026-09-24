@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import {
   useCallback,
@@ -68,11 +69,13 @@ import {
   InviteOrganizationMemberModal,
   OrganizationSettingsModal,
 } from "./OrganizationModals";
+import { TeamManagement } from "./TeamManagement";
 
-type OrganizationTab = "people" | "projects" | "workflows";
+type OrganizationTab = "people" | "teams" | "projects" | "workflows";
 
 const TABS: { id: OrganizationTab; label: string }[] = [
   { id: "people", label: "People" },
+  { id: "teams", label: "Teams" },
   { id: "projects", label: "Projects" },
   { id: "workflows", label: "Workflows" },
 ];
@@ -448,6 +451,8 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
           onRoleChange={requestRoleChange}
           onRemove={setRemoveMember}
         />
+      ) : activeTab === "teams" ? (
+        <TeamManagement isAdmin={isAdmin} firmMembers={members} />
       ) : activeTab === "projects" ? (
         <ResourceTable
           key="projects"
@@ -509,7 +514,6 @@ export function OrganizationWorkspace({ orgId }: { orgId: string }) {
               }));
               setSettingsOpen(false);
             }}
-            onDeleted={() => router.push("/organizations")}
           />
         </>
       ) : null}

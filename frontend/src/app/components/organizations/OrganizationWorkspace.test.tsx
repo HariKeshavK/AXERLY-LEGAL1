@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -331,7 +332,7 @@ describe("OrganizationWorkspace", () => {
     );
   });
 
-  it("spends Escape on the delete confirmation before the settings modal", async () => {
+  it("offers firm rename but no firm-deletion action", async () => {
     const user = userEvent.setup();
     render(<OrganizationWorkspace orgId="org-1" />);
     await screen.findByText("William Chen");
@@ -345,57 +346,15 @@ describe("OrganizationWorkspace", () => {
     const nameInput = screen.getByLabelText("Organization name");
     await user.clear(nameInput);
     await user.type(nameInput, "Elite Law Group");
-    await user.click(
-      screen.getByRole("button", { name: "Delete organization" }),
-    );
-    expect(screen.getByText("Delete Elite Law LLP?")).toBeInTheDocument();
-
-    // Both layers answered Escape, so declining the delete also closed the
-    // settings modal and threw away the rename typed above it. The
-    // confirmation is on top, so it alone takes the first press.
-    await user.keyboard("{Escape}");
-
-    expect(screen.queryByText("Delete Elite Law LLP?")).not.toBeInTheDocument();
-    expect(mocks.deleteOrg).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Delete organization" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Organization name")).toHaveValue(
       "Elite Law Group",
     );
-
-    // With the confirmation gone the next press belongs to the modal.
     await user.keyboard("{Escape}");
 
     await waitFor(() =>
       expect(screen.queryByLabelText("Organization name")).not.toBeInTheDocument(),
     );
-  });
-
-  it("retires the delete confirmation when its settings modal closes", async () => {
-    // The confirmation renders in its own portal, so closing the modal by
-    // other means must take it down too: otherwise it keeps floating over
-    // the page with a live Delete button still wired to this org.
-    const user = userEvent.setup();
-    render(<OrganizationWorkspace orgId="org-1" />);
-    await screen.findByText("William Chen");
-
-    await user.click(
-      screen.getByRole("button", { name: "Organization settings" }),
-    );
-    await user.click(
-      screen.getByRole("menuitem", { name: "Organization settings" }),
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Delete organization" }),
-    );
-    expect(screen.getByText("Delete Elite Law LLP?")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Close" }));
-
-    await waitFor(() =>
-      expect(
-        screen.queryByText("Delete Elite Law LLP?"),
-      ).not.toBeInTheDocument(),
-    );
-    expect(mocks.deleteOrg).not.toHaveBeenCalled();
   });
 
   it("does not report a sent invitation as failed when the refresh rejects", async () => {

@@ -21,3 +21,10 @@
 - P13: persist the storage master key via Electron `safeStorage`, and provide a user-facing backup/restore workflow for both PostgreSQL and encrypted files.
 - Package LibreOffice and PDF-processing Windows binaries for the installer, and resolve the existing Windows conversion/PDF test-fixture failures.
 - Remove legacy Docker, Redis, Mailpit, and remaining external-service deployment dependencies as their locked-architecture replacements are built.
+
+## After P5 single firm and teams
+
+- P6: replace the development-only initial-firm creation route with the licensed first-run setup flow; generate and hash the firm join code/password, and build the join/admin controls. The production route is deliberately absent until that gate exists.
+- P7: use all memberships from `teamIdsForUser` to union model entitlements and add explicit team targets to the existing Library/Project sharing model. Team membership currently grants no document or project access by itself.
+- If an existing installation has multiple organizations, design an explicit, reviewed, access-preserving migration. Migration `0004` intentionally refuses to merge tenants automatically.
+- Remove or repurpose the now-unmounted legacy Create Organization modal and obsolete frontend create/delete-org API helpers as part of the P6 onboarding redesign.

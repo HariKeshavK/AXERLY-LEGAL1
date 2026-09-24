@@ -3,7 +3,7 @@
 // Implementation files remain separate to keep each policy area testable.
 export type AuthzAction = "session:use" | "read" | "create" | "update" | "delete" | "share" | "admin";
 export interface AuthzUser { id: string; role: "admin" | "member"; status: "active" | "disabled"; }
-export interface AuthzResource { kind: "system" | "user" | "project" | "document" | "library"; ownerId?: string; accessRole?: "viewer" | "editor" | "owner"; }
+export interface AuthzResource { kind: "system" | "user" | "project" | "document" | "library" | "team"; ownerId?: string; accessRole?: "viewer" | "editor" | "owner"; }
 
 /** Deny-by-default authorization entry point. Route and service code must use this function. */
 import { can as canPermission, type Capability, type ProjectRole } from "./permissions";
@@ -15,6 +15,12 @@ export function can(userOrRole: AuthzUser | ProjectRole | null | undefined, acti
   const user = userOrRole as AuthzUser | null | undefined;
   if (!user || user.status !== "active") return false;
   if (action === "session:use") return resource.kind === "system";
+  if (resource.kind === "team") {
+    if (action === "read") return !!resource.accessRole;
+    if (action === "create" || action === "update" || action === "delete")
+      return resource.accessRole === "owner";
+    return false;
+  }
   if (user.role === "admin") return true;
   if (resource.kind === "user") return resource.ownerId === user.id && action !== "admin";
   const access = resource.accessRole;
