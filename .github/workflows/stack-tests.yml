@@ -1,0 +1,33 @@
+# AXERLY modified 2026-09-24.
+name: Embedded PostgreSQL stack
+
+on:
+  pull_request:
+    paths: ["backend/**", ".github/workflows/stack-tests.yml"]
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/stack-tests.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  embedded-postgres:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --allow-remote=all
+      - name: Verify bundled PostgreSQL and startup migrations
+        shell: pwsh
+        run: |
+          $env:AXERLY_DATA_DIR = Join-Path $env:RUNNER_TEMP "axerly-postgres-stack"
+          npm run verify:db
