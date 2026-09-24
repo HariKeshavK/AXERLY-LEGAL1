@@ -1,12 +1,10 @@
-// AXERLY modified 2026-09-23.
-// The upload-session control plane: create a session, hand out signed URLs,
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
+// The upload-session control plane: create a session, accept API-streamed bytes,
 // seal what the browser uploaded, queue it for processing, and cancel.
 //
 // Every function here takes an explicit `db` and returns a value or an
 // `UploadFailure`; uploads.routes.ts maps those onto status codes. File bytes
-// never pass through Express — the browser PUTs them straight to object
-// storage against a signed URL, and this file only ever moves objects between
-// the staging and sealed prefixes and records what it observed.
+// pass through the authenticated API into encrypted host storage.
 //
 // Two invariants are load-bearing:
 //
@@ -22,14 +20,14 @@ import {
   copyFile,
   deleteFile,
   deleteFileBestEffort,
-  getSignedUploadUrl,
   headFile,
+  storage,
   StorageOperationError,
 } from "../../lib/storage";
 import type { Db } from "../../lib/database";
+import { Readable, Transform } from "node:stream";
 import {
   uploadSessionExpiresAt,
-  UPLOAD_URL_TTL_SECONDS,
   UPLOAD_VERIFICATION_LEASE_SECONDS,
   type ParsedUploadSessionRequest,
   type UploadSessionFile,
@@ -76,44 +74,58 @@ async function loadSessionFiles(
 }
 
 // ---------------------------------------------------------------------------
-// Signed URLs
+// Client-safe upload descriptors
 // ---------------------------------------------------------------------------
-
-function signedUrlTtl(expiresAt: string): number {
-  const remainingSeconds = Math.floor(
-    (new Date(expiresAt).getTime() - Date.now()) / 1000,
-  );
-  return Math.max(1, Math.min(UPLOAD_URL_TTL_SECONDS, remainingSeconds));
-}
 
 async function signPendingFiles(
   files: Array<UploadSessionFileRow | UploadSessionFile>,
-  expiresAt: string,
+  _expiresAt: string,
 ) {
-  const ttl = signedUrlTtl(expiresAt);
-  return await Promise.all(
-    files.map(async (file) => {
-      const url = await getSignedUploadUrl(
-        file.staging_storage_path,
-        file.content_type,
-        file.expected_size_bytes,
-        ttl,
-      );
-      if (!url) throw new Error("Failed to create signed upload URL");
-      return {
-        ...publicFile(file),
-        upload: {
-          method: "PUT" as const,
-          url,
-          // Content-Length is part of the signature but is deliberately absent
-          // here: browsers set it from the body and refuse a manual override,
-          // so a wrong-size body fails signature validation at the store.
-          headers: { "Content-Type": file.content_type },
-          expires_at: new Date(Date.now() + ttl * 1000).toISOString(),
-        },
-      };
-    }),
-  );
+  return files.map(publicFile);
+}
+
+/** Stream one authenticated upload directly into encrypted local storage. */
+export async function receiveUploadSessionFile(
+  db: Db,
+  args: { sessionId: string; fileId: string; userId: string; body: Readable; contentLength?: number },
+): Promise<UploadResult<null>> {
+  const session = await loadOwnedSession(db, args.sessionId, args.userId);
+  if (!session || session.status !== "pending_upload") return failure(404, { detail: "Upload file not found" });
+  if (new Date(session.expires_at).getTime() <= Date.now()) return failure(410, { detail: "Upload session expired" });
+  const file = (await loadSessionFiles(db, session.id)).find((item) => item.id === args.fileId);
+  if (!file || file.status !== "pending_upload") return failure(404, { detail: "Upload file not found" });
+  if (args.contentLength !== undefined && args.contentLength !== file.expected_size_bytes) {
+    return failure(400, { detail: "Upload size does not match the manifest" });
+  }
+  let observed = 0;
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
+      observed += Buffer.byteLength(chunk);
+      callback(observed > file.expected_size_bytes
+        ? new Error("Upload exceeds declared size") : null, chunk);
+    },
+  });
+  const onInputError = (error: Error) => limiter.destroy(error);
+  args.body.once("error", onInputError);
+  args.body.pipe(limiter);
+  try {
+    await storage.put(limiter, {
+      ownerId: args.userId,
+      logicalKey: file.sealed_storage_path,
+      resourceKind: "document",
+      resourceId: file.resource_id,
+    });
+    if (observed !== file.expected_size_bytes) {
+      await storage.delete(file.sealed_storage_path);
+      return failure(400, { detail: "Upload size does not match the manifest" });
+    }
+    return { ok: true, data: null };
+  } catch (error) {
+    await storage.delete(file.sealed_storage_path).catch(() => undefined);
+    return internalFailure(error, 503);
+  } finally {
+    args.body.off("error", onInputError);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -444,64 +456,6 @@ export async function getUploadSession(
  * Re-sign the files that have not landed yet. Signed URLs are shorter-lived
  * than the session, so a slow batch legitimately comes back for more.
  */
-export async function refreshUploadUrls(
-  db: Db,
-  sessionId: string,
-  userId: string,
-): Promise<UploadResult<Record<string, unknown>>> {
-  const session = await loadOwnedSession(db, sessionId, userId);
-  if (!session) return failure(404, { detail: "Upload session not found" });
-  if (session.status !== "pending_upload") {
-    return failure(409, {
-      detail: "Upload URLs can only be refreshed for a pending session",
-    });
-  }
-  if (new Date(session.expires_at).getTime() <= Date.now()) {
-    await db
-      .from("upload_sessions")
-      .update({ status: "expired", updated_at: new Date().toISOString() })
-      .eq("id", session.id)
-      .eq("status", "pending_upload");
-    return failure(410, { detail: "Upload session expired" });
-  }
-
-  const files = await loadSessionFiles(db, session.id);
-  const pendingFiles = files.filter((file) =>
-    ["pending_upload", "verifying"].includes(file.status),
-  );
-  if (pendingFiles.some((file) => file.status === "pending_upload")) {
-    const { error } = await db
-      .from("upload_session_files")
-      .update({
-        status: "pending_upload",
-        error_code: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("session_id", session.id)
-      .eq("status", "pending_upload");
-    if (error) return internalFailure(error);
-  }
-  if (pendingFiles.some((file) => file.status === "verifying")) {
-    // Only reclaim a verification lease that has already expired. A fresh
-    // one means another request is still sealing that file.
-    const { error } = await db
-      .from("upload_session_files")
-      .update({
-        status: "pending_upload",
-        error_code: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("session_id", session.id)
-      .eq("status", "verifying")
-      .lte("updated_at", verificationLeaseCutoff());
-    if (error) return internalFailure(error);
-  }
-  return {
-    ok: true,
-    data: { files: await signPendingFiles(pendingFiles, session.expires_at) },
-  };
-}
-
 /**
  * The client reports one file as uploaded (or as failed). Seal it, queue its
  * processing job, and answer with the session's current state. `status` is the

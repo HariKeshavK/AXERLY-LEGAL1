@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 // Upload-session manifest: the protocol's vocabulary and its one validator.
 //
 // `parseUploadSessionRequest` turns the client's raw JSON body into the
@@ -19,7 +20,7 @@ import {
   contentTypeForDocumentType,
   documentSuffix,
 } from "../../lib/documentTypes";
-export const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
+export const MAX_UPLOAD_SIZE_BYTES = 256 * 1024 * 1024;
 export const MAX_UPLOAD_SESSION_FILES = 50;
 export const MAX_UPLOAD_SESSION_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const UPLOAD_SESSION_TTL_SECONDS = 30 * 60;
@@ -171,7 +172,7 @@ export function parseUploadSessionRequest(
       issue?.code === "too_big" && issue.path.includes("size_bytes");
     throw new UploadSessionValidationError(
       isFileTooLarge
-        ? "Each uploaded file must be 100 MB or smaller"
+        ? "Each uploaded file must be 256 MB or smaller"
         : (issue?.message ?? "Invalid upload session request"),
       isFileTooLarge
         ? { status: 413, code: "upload_file_too_large" }

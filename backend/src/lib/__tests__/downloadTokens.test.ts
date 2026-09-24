@@ -1,3 +1,5 @@
+// AXERLY modified 2026-09-24.
+import { createHash } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { signDownload, verifyDownload, buildDownloadUrl } from "../downloadTokens";
 
@@ -39,7 +41,8 @@ describe("verifyDownload", () => {
         const token = signDownload(path, filename);
         const result = verifyDownload(token);
         expect(result).not.toBeNull();
-        expect(result!.path).toBe(path);
+        expect(result!.keyHash).toBe(createHash("sha256").update(path).digest("hex"));
+        expect(token).not.toContain(Buffer.from(path).toString("base64url"));
         expect(result!.filename).toBe(filename);
     });
 
@@ -103,7 +106,7 @@ describe("buildDownloadUrl", () => {
         const token = url.replace("/download/", "");
         const result = verifyDownload(token);
         expect(result).not.toBeNull();
-        expect(result!.path).toBe(path);
+        expect(result!.keyHash).toBe(createHash("sha256").update(path).digest("hex"));
         expect(result!.filename).toBe(filename);
     });
 });

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { settleWithConcurrency } from "../lib/settleWithConcurrency";
 import { createSecureUuid } from "../lib/secureUuid";
 
@@ -58,7 +59,7 @@ const UPLOAD_PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
 /** A single storage PUT that stalls this long is retried, not waited on. */
 const PUT_TIMEOUT_MS = 120 * 1000;
 const MAX_UPLOAD_SESSION_FILES = 50;
-const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_UPLOAD_SESSION_BYTES = 2 * 1024 * 1024 * 1024;
 
 /**
@@ -149,11 +150,6 @@ type UploadSessionFileResponse = {
         | "error";
     error_code: string | null;
     result: unknown;
-    upload?: {
-        method: "PUT";
-        url: string;
-        headers: Record<string, string>;
-    };
 };
 
 type UploadSessionResponse = {
@@ -163,7 +159,6 @@ type UploadSessionResponse = {
 
 type UploadSessionTransport = {
     apiRequest<T>(path: string, init?: RequestInit): Promise<T>;
-    fetchStorage: typeof fetch;
     shouldRetryControlRequest(error: unknown): boolean;
 };
 
@@ -342,8 +337,7 @@ async function runUploadSession<T>(args: {
     signal?: AbortSignal;
     reportProgress: (progress: UploadProgress<T>) => void;
 }): Promise<UploadOutcome<T>[]> {
-    const { apiRequest, fetchStorage, shouldRetryControlRequest } =
-        args.transport;
+    const { apiRequest, shouldRetryControlRequest } = args.transport;
     const inputs = args.inputs;
     const reportProgress = args.reportProgress;
     const reportResponse = (response: UploadSessionResponse) => {
@@ -382,29 +376,9 @@ async function runUploadSession<T>(args: {
     );
     const sessionId = created.session.id;
     reportResponse(created);
-    let descriptors = new Map(
+    const descriptors = new Map(
         created.files.map((file) => [file.client_id, file]),
     );
-    let refreshInFlight: Promise<void> | null = null;
-    const refreshUrls = async () => {
-        if (!refreshInFlight) {
-            refreshInFlight = apiRequest<{
-                files: UploadSessionFileResponse[];
-            }>(`/upload-sessions/${sessionId}/urls`, {
-                method: "POST",
-                signal: args.signal,
-            })
-                .then(({ files }) => {
-                    descriptors = new Map(
-                        files.map((file) => [file.client_id, file]),
-                    );
-                })
-                .finally(() => {
-                    refreshInFlight = null;
-                });
-        }
-        await refreshInFlight;
-    };
     const completeFile = async (
         descriptor: UploadSessionFileResponse,
         failed: boolean,
@@ -449,28 +423,21 @@ async function runUploadSession<T>(args: {
                 });
                 let lastError: unknown;
                 for (let attempt = 0; attempt < 3; attempt += 1) {
-                    if (attempt > 0) {
-                        try {
-                            await refreshUrls();
-                        } catch (error) {
-                            if (args.signal?.aborted) throw error;
-                            lastError = error;
-                            continue;
-                        }
-                    }
                     const descriptor = descriptors.get(input.clientId);
-                    if (!descriptor?.upload) {
-                        lastError = new Error("Upload URL is unavailable");
+                    if (!descriptor) {
+                        lastError = new Error("Upload descriptor is unavailable");
                         continue;
                     }
-                    let response: Response;
                     try {
-                        response = await fetchStorage(descriptor.upload.url, {
-                            method: descriptor.upload.method,
-                            headers: descriptor.upload.headers,
+                        await apiRequest<void>(
+                          `/upload-sessions/${sessionId}/files/${descriptor.id}`,
+                          {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/octet-stream" },
                             body: input.file,
                             signal: storageAttemptSignal(args.signal),
-                        });
+                          },
+                        );
                     } catch (error) {
                         // A caller abort ends the batch; the per-attempt
                         // timeout is just another failed attempt.
@@ -478,20 +445,15 @@ async function runUploadSession<T>(args: {
                         lastError = error;
                         continue;
                     }
-                    if (response.ok) {
-                        reportProgress({
-                            clientId: input.clientId,
-                            filename: input.file.name,
-                            status: "uploaded",
-                            result: null,
-                            errorCode: null,
-                        });
-                        await completeFile(descriptor, false);
-                        return { status: "uploaded" as const };
-                    }
-                    lastError = new Error(
-                        `Object storage returned ${response.status}`,
-                    );
+                    reportProgress({
+                        clientId: input.clientId,
+                        filename: input.file.name,
+                        status: "uploaded",
+                        result: null,
+                        errorCode: null,
+                    });
+                    await completeFile(descriptor, false);
+                    return { status: "uploaded" as const };
                 }
                 const descriptor = descriptors.get(input.clientId);
                 if (descriptor) {

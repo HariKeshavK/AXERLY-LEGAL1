@@ -1,10 +1,11 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // HTTP layer for the downloads module.
 //
 // Route handlers parse params, call the downloads.service functions, and map
 // their typed results onto status codes, headers, and JSON.
 
 import { Router } from "express";
+import { pipeline } from "node:stream/promises";
 import { requireAuth } from "../../middleware/auth";
 import { asyncRoute, routerErrorHandler } from "../../middleware/asyncRoute";
 import { createDatabase } from "../../lib/database";
@@ -34,7 +35,13 @@ downloadsRouter.get("/:token", requireAuth, asyncRoute(async (req, res) => {
         "Content-Disposition",
         buildContentDisposition("attachment", result.filename),
     );
-    res.send(result.bytes);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    try { await pipeline(result.stream, res); }
+    catch (error) {
+        result.stream.destroy();
+        if (!res.headersSent && !res.destroyed) res.status(500).json({ detail: "File could not be read" });
+    }
 }));
 
 downloadsRouter.use(routerErrorHandler("[downloads]"));

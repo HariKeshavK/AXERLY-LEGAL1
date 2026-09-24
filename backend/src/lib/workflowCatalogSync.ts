@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import { readFile } from "fs/promises";
 import { contentTypeForDocumentType } from "./documentTypes";
 import { storageEnabled, uploadFile } from "./storage";
@@ -47,7 +47,7 @@ export async function syncWorkflowCatalog(
     );
     if (hasAssets && !storageEnabled) {
       throw new Error(
-        "Workflow assets require configured S3-compatible storage",
+        "Workflow assets require encrypted local storage",
       );
     }
 

@@ -242,11 +242,14 @@ const baseSession = {
 
 describe("upload processing", () => {
   let processingTempRoot: string;
+  let dataRoot: string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    processingTempRoot = await mkdtemp(join(tmpdir(), "mike-upload-test-"));
-    process.env.UPLOAD_PROCESSING_TEMP_DIR = processingTempRoot;
+    dataRoot = await mkdtemp(join(tmpdir(), "axerly-upload-test-"));
+    process.env.AXERLY_DATA_DIR = dataRoot;
+    processingTempRoot = join(dataRoot, "tmp", "processing");
+    await mkdir(processingTempRoot, { recursive: true });
     mocks.createFileReadStream.mockImplementation(() =>
       Readable.from([Buffer.from([1, 2, 3, 4])]),
     );
@@ -261,8 +264,8 @@ describe("upload processing", () => {
 
   afterEach(async () => {
     expect(await readdir(processingTempRoot)).toEqual([]);
-    await rm(processingTempRoot, { recursive: true, force: true });
-    delete process.env.UPLOAD_PROCESSING_TEMP_DIR;
+    await rm(dataRoot, { recursive: true, force: true });
+    delete process.env.AXERLY_DATA_DIR;
   });
 
   it("creates a document and V1 from a sealed object without an HTTP upload body", async () => {
@@ -663,7 +666,7 @@ describe("upload processing", () => {
   });
 
   it("removes stale temporary upload directories left by an interrupted worker", async () => {
-    const staleDirectory = join(processingTempRoot, "mike-upload-stale");
+    const staleDirectory = join(processingTempRoot, "axerly-upload-stale");
     await mkdir(staleDirectory);
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     await utimes(staleDirectory, twoHoursAgo, twoHoursAgo);

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 /**
  * Mike API client — all browser requests use the same-origin `/api` gateway.
  * Authentication is carried only by the backend-managed HttpOnly cookie.
@@ -196,7 +197,6 @@ export async function uploadFilesWithSession<T>(args: {
         ...args,
         transport: {
             apiRequest,
-            fetchStorage: (...fetchArgs) => fetch(...fetchArgs),
             shouldRetryControlRequest: createControlRequestRetryPolicy(
                 (error) =>
                     error instanceof MikeApiError

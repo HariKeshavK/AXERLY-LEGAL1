@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // Business logic + data-access for the downloads module.
 //
 // Service layer behind downloads.routes.ts. Takes an explicit database client
@@ -7,7 +7,8 @@
 // req/res — the route maps the result onto status codes, headers, and body.
 
 import type { Db } from "../../lib/database";
-import { downloadFile } from "../../lib/storage";
+import { createFileReadStream } from "../../lib/storage";
+import type { Readable } from "node:stream";
 import { verifyDownload } from "../../lib/downloadTokens";
 import { ensureDocAccess } from "../../lib/authz";
 import {
@@ -29,16 +30,23 @@ export async function resolveTokenDownload(
     db: Db,
     args: { token: string; userId: string; userEmail: string | undefined },
 ): Promise<
-    | { ok: true; bytes: Buffer; contentType: string; filename: string }
+    | { ok: true; stream: Readable; contentType: string; filename: string }
     | { ok: false; kind: "invalid_link" | "not_found" }
 > {
     const info = verifyDownload(args.token);
     if (!info) return { ok: false, kind: "invalid_link" };
 
+    const { data: stored } = await db.from("stored_files")
+        .select("logical_key")
+        .eq("logical_key_sha256", info.keyHash)
+        .maybeSingle();
+    const logicalKey = (stored as { logical_key?: string } | null)?.logical_key;
+    if (!logicalKey) return { ok: false, kind: "not_found" };
+
     const { data: version } = await db
         .from("document_versions")
         .select("id, document_id")
-        .eq("storage_path", info.path)
+        .eq("storage_path", logicalKey)
         .is("deleted_at", null)
         .maybeSingle();
     if (!version) return { ok: false, kind: "not_found" };
@@ -53,12 +61,9 @@ export async function resolveTokenDownload(
     const access = await ensureDocAccess(doc, args.userId, args.userEmail, db);
     if (!access.ok) return { ok: false, kind: "not_found" };
 
-    const raw = await downloadFile(info.path);
-    if (!raw) return { ok: false, kind: "not_found" };
-
     return {
         ok: true,
-        bytes: Buffer.from(raw),
+        stream: createFileReadStream(logicalKey),
         contentType: contentTypeFor(info.filename),
         filename: info.filename,
     };

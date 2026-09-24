@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/app/lib/authApi";
+import { acknowledgeStorageRecoveryKey, pendingStorageRecoveryKey, login } from "@/app/lib/authApi";
 import { Input } from "@/app/components/ui/input";
 import { PillButtonUI } from "@/shared/ui/PillButtonUI";
 import { SiteLogo } from "@/app/components/site-logo";
@@ -33,12 +33,21 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+    const [savedRecoveryKey, setSavedRecoveryKey] = useState(false);
 
     useEffect(() => {
-        if (!authLoading && isAuthenticated) {
-            router.replace("/onboarding/profile");
-        }
-    }, [authLoading, isAuthenticated, router]);
+        if (authLoading || !isAuthenticated || loading || recoveryKey) return;
+        let cancelled = false;
+        void pendingStorageRecoveryKey().then((key) => {
+            if (cancelled) return;
+            if (key) setRecoveryKey(key);
+            else router.replace("/onboarding/profile");
+        }).catch(() => {
+            if (!cancelled) setError("Unable to load the storage recovery key. Please retry.");
+        });
+        return () => { cancelled = true; };
+    }, [authLoading, isAuthenticated, loading, recoveryKey, router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,8 +56,10 @@ export default function LoginPage() {
 
         try {
             await login(email, password);
+            const key = await pendingStorageRecoveryKey();
+            if (key) setRecoveryKey(key);
             await refreshSession();
-            router.push("/onboarding/profile");
+            if (!key) router.push("/onboarding/profile");
         } catch (error: unknown) {
             setError(
                 knownErrorCodeMessage(
@@ -62,13 +73,41 @@ export default function LoginPage() {
         }
     };
 
+    const continueAfterRecovery = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            await acknowledgeStorageRecoveryKey();
+            router.push("/onboarding/profile");
+        } catch {
+            setError("Could not confirm the recovery key. Please retry.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="relative flex min-h-dvh items-center justify-center bg-gray-50/80 px-6 py-10">
             <div className="absolute top-4 md:top-8 left-1/2 -translate-x-1/2">
                 <SiteLogo size="lg" asLink />
             </div>
             <div className="w-full max-w-md">
-                {/* Login Form */}
+                {recoveryKey ? (
+                    <div className={cn(authGlassCardClassName, "mb-4 space-y-4")}>
+                        <h2 className="text-2xl font-medium font-serif text-gray-950">Save your storage recovery key</h2>
+                        <p className="text-sm text-gray-700">This key is shown only once. Store it somewhere safe outside this computer. Without it, encrypted firm files cannot be recovered if the host loses its secrets.</p>
+                        <code className="block break-all rounded bg-gray-100 p-3 text-sm text-gray-950" data-testid="storage-recovery-key">{recoveryKey}</code>
+                        <label className="flex items-start gap-2 text-sm text-gray-800">
+                            <input type="checkbox" checked={savedRecoveryKey} onChange={(event) => setSavedRecoveryKey(event.target.checked)} />
+                            I have saved this recovery key in a safe place.
+                        </label>
+                        {error && <p className="text-sm text-red-600">{error}</p>}
+                        <PillButtonUI type="button" tone="black" size="normal" disabled={!savedRecoveryKey || loading}
+                            onClick={() => void continueAfterRecovery()} className="w-full">
+                            Continue
+                        </PillButtonUI>
+                    </div>
+                ) : (
                 <div className={cn(authGlassCardClassName, "mb-4")}>
                     <h2 className="mb-6 text-left text-2xl font-medium font-serif text-gray-950">
                         Log In
@@ -128,6 +167,7 @@ export default function LoginPage() {
                         </div>
                     </form>
                 </div>
+                )}
             </div>
         </div>
     );

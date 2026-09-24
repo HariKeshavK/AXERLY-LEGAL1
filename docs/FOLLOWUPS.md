@@ -14,3 +14,10 @@
 
 - P6 must replace the development-only first-user bootstrap with licensed organization creation and invitation/join flows.
 - Replace the remaining historical `auth_handoff_tickets` definition in immutable baseline migration `0001` only through the applied `0002` drop; do not edit the baseline checksum.
+
+## After P4 encrypted files
+
+- Plan an explicit, authorized one-time migration/import of historical R2/S3 objects; P4 does not move existing remote data.
+- P13: persist the storage master key via Electron `safeStorage`, and provide a user-facing backup/restore workflow for both PostgreSQL and encrypted files.
+- Package LibreOffice and PDF-processing Windows binaries for the installer, and resolve the existing Windows conversion/PDF test-fixture failures.
+- Remove legacy Docker, Redis, Mailpit, and remaining external-service deployment dependencies as their locked-architecture replacements are built.

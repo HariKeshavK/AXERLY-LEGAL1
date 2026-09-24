@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   copyFile: vi.fn(),
   deleteFile: vi.fn(),
-  getSignedUploadUrl: vi.fn(),
+  putFile: vi.fn(),
   headFile: vi.fn(),
   rpc: vi.fn(),
   session: null as Record<string, unknown> | null,
@@ -99,7 +99,7 @@ vi.mock("../../lib/database", () => ({
 
 vi.mock("../../lib/storage", () => ({
   storageEnabled: true,
-  getSignedUploadUrl: mocks.getSignedUploadUrl,
+  storage: { put: mocks.putFile, delete: vi.fn() },
   copyFile: mocks.copyFile,
   deleteFile: mocks.deleteFile,
   deleteFileBestEffort: (key: string) =>
@@ -148,9 +148,10 @@ describe("upload session completion", () => {
     ];
     mocks.copyFile.mockResolvedValue(undefined);
     mocks.deleteFile.mockResolvedValue(undefined);
-    mocks.getSignedUploadUrl.mockResolvedValue(
-      "https://upload.example/refreshed",
-    );
+    mocks.putFile.mockImplementation(async (stream: AsyncIterable<Buffer>) => {
+      for await (const _chunk of stream) { /* Consume the uploaded bytes. */ }
+      return { id: "77777777-7777-4777-8777-777777777777", size: 4, sha256: "test" };
+    });
     mocks.rpc.mockImplementation(async (name: string) =>
       name === "queue_upload_session_file_processing"
         ? { data: "job-1", error: null }
@@ -266,46 +267,16 @@ describe("upload session completion", () => {
     });
   });
 
-  it("refreshes PUT URLs for files that have not been verified", async () => {
-    const response = await request(app).post(
-      "/upload-sessions/22222222-2222-4222-8222-222222222222/urls",
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.body.files[0].upload).toMatchObject({
-      method: "PUT",
-      url: "https://upload.example/refreshed",
-    });
-    expect(mocks.getSignedUploadUrl).toHaveBeenCalledWith(
-      "staging-key",
-      "application/pdf",
-      4,
-      expect.any(Number),
-    );
-  });
-
-  it("does not reclaim a verifying file whose lease is still fresh", async () => {
-    mocks.files[0]!.status = "verifying";
-    mocks.files[0]!.updated_at = new Date().toISOString();
-
-    const response = await request(app).post(
-      "/upload-sessions/22222222-2222-4222-8222-222222222222/urls",
-    );
-
-    expect(response.status).toBe(200);
-    expect(mocks.files[0]).toMatchObject({ status: "verifying" });
-  });
-
-  it("reclaims a verifying file whose lease has expired", async () => {
-    mocks.files[0]!.status = "verifying";
-    mocks.files[0]!.updated_at = "2000-01-01T00:00:00.000Z";
-
-    const response = await request(app).post(
-      "/upload-sessions/22222222-2222-4222-8222-222222222222/urls",
-    );
-
-    expect(response.status).toBe(200);
-    expect(mocks.files[0]).toMatchObject({ status: "pending_upload" });
+  it("streams a raw PUT through the encrypted storage interface", async () => {
+    const response = await request(app)
+      .put("/upload-sessions/22222222-2222-4222-8222-222222222222/files/33333333-3333-4333-8333-333333333333")
+      .set("Content-Type", "application/octet-stream")
+      .send(Buffer.from("abcd"));
+    expect(response.status).toBe(204);
+    expect(mocks.putFile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      ownerId: "11111111-1111-4111-8111-111111111111",
+      logicalKey: "sealed-key",
+    }));
   });
 
   it("does not publish a seal result after its verification claim is stolen", async () => {

@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import {
   createDocumentVersion,
   updateDocumentVersion,
@@ -16,13 +16,14 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
-import { hostname, tmpdir } from "node:os";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 
 import { resolveContentOrgId } from "../../lib/authz";
+import { axerlyDataDir } from "../../config/secrets";
 import { recordAudit } from "../../lib/audit";
 import { enqueueStorageCleanup } from "../../lib/dbq/enqueue";
 import { convertedPdfKey, officeFileToPdf } from "../../lib/convert";
@@ -224,7 +225,7 @@ async function removeTemporaryArtifact(directory: string): Promise<void> {
 }
 
 function uploadProcessingTempRoot(): string {
-  return process.env.UPLOAD_PROCESSING_TEMP_DIR?.trim() || tmpdir();
+  return join(axerlyDataDir(), "tmp", "processing");
 }
 
 export async function cleanupUploadProcessingTempFiles(
@@ -236,7 +237,7 @@ export async function cleanupUploadProcessingTempFiles(
   await Promise.all(
     entries
       .filter(
-        (entry) => entry.isDirectory() && entry.name.startsWith("mike-upload-"),
+        (entry) => entry.isDirectory() && entry.name.startsWith("axerly-upload-"),
       )
       .map(async (entry) => {
         const directory = join(root, entry.name);
@@ -254,7 +255,7 @@ async function requireSealedFile(
 ): Promise<SealedFileArtifact> {
   const temporaryRoot = uploadProcessingTempRoot();
   await mkdir(temporaryRoot, { recursive: true });
-  const directory = await mkdtemp(join(temporaryRoot, "mike-upload-"));
+  const directory = await mkdtemp(join(temporaryRoot, "axerly-upload-"));
   const extension = /^[a-z0-9]{1,16}$/.test(file.file_type)
     ? file.file_type
     : "bin";

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import crypto from "crypto";
 
 /**
@@ -40,7 +41,8 @@ function timingSafeEqStr(a: string, b: string): boolean {
 }
 
 export function signDownload(path: string, filename: string): string {
-    const payload = JSON.stringify({ p: path, f: filename });
+    const keyHash = crypto.createHash("sha256").update(path).digest("hex");
+    const payload = JSON.stringify({ h: keyHash, f: filename });
     const enc = b64urlEncode(Buffer.from(payload, "utf8"));
     const sig = crypto
         .createHmac("sha256", getSecret())
@@ -51,7 +53,7 @@ export function signDownload(path: string, filename: string): string {
 
 export function verifyDownload(
     token: string,
-): { path: string; filename: string } | null {
+): { keyHash: string; filename: string } | null {
     const parts = token.split(".");
     if (parts.length !== 2) return null;
     const [enc, sigEnc] = parts;
@@ -62,11 +64,11 @@ export function verifyDownload(
     if (!timingSafeEqStr(sigEnc, b64urlEncode(expected))) return null;
     try {
         const parsed = JSON.parse(b64urlDecode(enc).toString("utf8")) as {
-            p: string;
+            h: string;
             f: string;
         };
-        if (!parsed?.p || !parsed?.f) return null;
-        return { path: parsed.p, filename: parsed.f };
+        if (!/^[0-9a-f]{64}$/.test(parsed?.h ?? "") || !parsed?.f) return null;
+        return { keyHash: parsed.h, filename: parsed.f };
     } catch {
         return null;
     }

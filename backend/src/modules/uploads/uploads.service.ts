@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 // The uploads module's stable facade.
 //
 // The upload protocol has one caller outside this directory besides app.ts
@@ -32,7 +33,7 @@ export {
   completeUploadSessionFile,
   createUploadSession,
   getUploadSession,
-  refreshUploadUrls,
+  receiveUploadSessionFile,
 } from "./uploads.sessions";
 
 export type {

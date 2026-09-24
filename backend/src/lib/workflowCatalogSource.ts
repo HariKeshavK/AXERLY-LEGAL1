@@ -1,7 +1,8 @@
+// AXERLY modified 2026-09-24.
 import { createHash } from "crypto";
 import { mkdir, mkdtemp, open, readFile, rm, writeFile } from "fs/promises";
-import { tmpdir } from "os";
 import path from "path";
+import { axerlyDataDir } from "../config/secrets";
 import JSZip, { type JSZipObject } from "jszip";
 import { parse as parseYaml } from "yaml";
 
@@ -753,8 +754,10 @@ export function validateWorkflowCatalogDocument(
 export async function prepareWorkflowCatalog(
   options: WorkflowCatalogSourceOptions = {},
 ): Promise<PreparedWorkflowCatalog> {
+  const temporaryRoot = options.temporaryRoot ?? path.join(axerlyDataDir(), "tmp", "workflows");
+  await mkdir(temporaryRoot, { recursive: true, mode: 0o700 });
   const directory = await mkdtemp(
-    path.join(options.temporaryRoot ?? tmpdir(), "mike-workflows-"),
+    path.join(temporaryRoot, "axerly-workflows-"),
   );
   try {
     const archivePath = path.join(directory, "source.zip");

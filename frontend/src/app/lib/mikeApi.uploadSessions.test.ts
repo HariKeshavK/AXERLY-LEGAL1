@@ -57,8 +57,6 @@ function installSuccessfulSessionServer(options?: {
     resolvePendingUploadsOnPoll?: boolean;
     /** These filenames never leave `processing`, so a batch can time out. */
     stuckFilenames?: string[];
-    /** Hand back a different upload URL once the client refreshes. */
-    rotateUrlsOnRefresh?: boolean;
 }) {
     const manifests: Manifest[] = [];
     const sessionManifests = new Map<string, Manifest>();
@@ -74,13 +72,8 @@ function installSuccessfulSessionServer(options?: {
     let activeStorageUploads = 0;
     let maximumStorageUploads = 0;
     let statusRequestCount = 0;
-    let refreshedUrls = false;
     const isStuck = (clientId: string) =>
         (options?.stuckFilenames ?? []).includes(filenames.get(clientId) ?? "");
-    const uploadUrl = (clientId: string) =>
-        refreshedUrls && options?.rotateUrlsOnRefresh
-            ? `https://storage.test/refreshed/${clientId}`
-            : `https://storage.test/${clientId}`;
     const uploadFiles = (manifest: Manifest) =>
         manifest.files.map((file) => ({
             id: file.client_id,
@@ -89,11 +82,6 @@ function installSuccessfulSessionServer(options?: {
             status: "pending_upload",
             error_code: null,
             result: null,
-            upload: {
-                method: "PUT",
-                url: uploadUrl(file.client_id),
-                headers: { "Content-Type": "application/pdf" },
-            },
         }));
     const sessionResponse = (sessionId: string, finishProcessing = false) => {
         const manifest = sessionManifests.get(sessionId)!;
@@ -181,16 +169,10 @@ function installSuccessfulSessionServer(options?: {
                     201,
                 );
             }
-            const refresh = url.match(
-                new RegExp(`^${API_URL}/upload-sessions/([^/]+)/urls$`),
+            const fileTransfer = url.match(
+                new RegExp(`^${API_URL}/upload-sessions/([^/]+)/files/([^/]+)$`),
             );
-            if (refresh && init?.method === "POST") {
-                refreshedUrls = true;
-                return json({
-                    files: uploadFiles(sessionManifests.get(refresh[1]!)!),
-                });
-            }
-            if (url.startsWith("https://storage.test/")) {
+            if (fileTransfer && init?.method === "PUT") {
                 storageRequests.push({ url, init: init ?? {} });
                 activeStorageUploads += 1;
                 maximumStorageUploads = Math.max(
@@ -200,7 +182,7 @@ function installSuccessfulSessionServer(options?: {
                 try {
                     return options?.storageUpload
                         ? await options.storageUpload(url, init ?? {})
-                        : new Response(null, { status: 200 });
+                        : new Response(null, { status: 204 });
                 } finally {
                     activeStorageUploads -= 1;
                 }
@@ -300,7 +282,7 @@ describe("direct upload sessions", () => {
             storageUpload: () =>
                 new Promise((resolve) =>
                     setTimeout(
-                        () => resolve(new Response(null, { status: 200 })),
+                        () => resolve(new Response(null, { status: 204 })),
                         5,
                     ),
                 ),
@@ -320,7 +302,7 @@ describe("direct upload sessions", () => {
         expect(server.maximumStorageUploads()).toBe(3);
         const calls = fetchMock.mock.calls.map(([url]) => String(url));
         const firstFileCompletion = calls.findIndex((url) =>
-            url.includes("/files/"),
+            url.endsWith("/complete"),
         );
         expect(firstFileCompletion).toBeGreaterThan(-1);
         expect(calls.some((url) => url.endsWith("/session-1/complete"))).toBe(
@@ -332,8 +314,9 @@ describe("direct upload sessions", () => {
         expect(
             calls
                 .slice(0, firstFileCompletion)
-                .filter((url) => url.startsWith("https://storage.test/")),
-        ).toHaveLength(3);
+                .filter((url) => url.includes("/files/") && !url.endsWith("/complete"))
+                .length,
+        ).toBeGreaterThanOrEqual(3);
         expect(outcomes).toHaveLength(7);
         expect(
             outcomes.every((outcome) => outcome.status === "completed"),
@@ -376,7 +359,7 @@ describe("direct upload sessions", () => {
                 failedUrl ??= url;
                 attempts.set(url, (attempts.get(url) ?? 0) + 1);
                 return new Response(null, {
-                    status: url === failedUrl ? 503 : 200,
+                    status: url === failedUrl ? 503 : 204,
                 });
             },
         });
@@ -654,20 +637,20 @@ describe("direct upload sessions", () => {
     it("splits a selection that exceeds the per-session byte budget", async () => {
         const server = installSuccessfulSessionServer();
 
-        // 21 files at the 100 MB per-file ceiling exceed the 2 GB session
+        // Nine files at the 256 MB per-file ceiling exceed the 2 GB session
         // budget, so the batch has to break across two sessions.
         await uploadFilesWithSession<{ id: string }>({
             purpose: "document_create",
             destination: { scope: "standalone" },
-            files: Array.from({ length: 21 }, (_, index) => ({
-                file: fileOfSize(`file-${index}.pdf`, 100 * 1024 * 1024),
+            files: Array.from({ length: 9 }, (_, index) => ({
+                file: fileOfSize(`file-${index}.pdf`, 256 * 1024 * 1024),
             })),
         });
 
         expect(
             server.manifests.map((manifest) => manifest.files.length),
-        ).toEqual([20, 1]);
-        expect(server.manifests[1]!.files[0]!.filename).toBe("file-20.pdf");
+        ).toEqual([8, 1]);
+        expect(server.manifests[1]!.files[0]!.filename).toBe("file-8.pdf");
     });
 
     it("fails only the oversized file and uploads the rest", async () => {
@@ -677,7 +660,7 @@ describe("direct upload sessions", () => {
             purpose: "document_create",
             destination: { scope: "standalone" },
             files: [
-                { file: fileOfSize("huge.pdf", 120 * 1024 * 1024) },
+                { file: fileOfSize("huge.pdf", 300 * 1024 * 1024) },
                 { file: new File(["pdf"], "small.pdf") },
             ],
         });
@@ -696,11 +679,11 @@ describe("direct upload sessions", () => {
         ]);
         // m14: a shared validation code names the limit, not the filename.
         expect(failedUploadMessage(outcomes)).toBe(
-            "Each uploaded file must be 100 MB or smaller.",
+            "Each uploaded file must be 256 MB or smaller.",
         );
     });
 
-    it("sends the storage PUT without credentials or an Authorization header", async () => {
+    it("sends the file PUT through the authenticated API", async () => {
         const server = installSuccessfulSessionServer();
 
         await uploadFilesWithSession({
@@ -711,12 +694,13 @@ describe("direct upload sessions", () => {
 
         expect(server.storageRequests).toHaveLength(1);
         const { init } = server.storageRequests[0]!;
-        expect(init.credentials).toBeUndefined();
+        expect(init.credentials).toBe("include");
         expect(
             Object.keys(init.headers as Record<string, string>).map((header) =>
                 header.toLowerCase(),
             ),
-        ).toEqual(["content-type"]);
+        ).toContain("content-type");
+        expect(server.storageRequests[0]!.url).toMatch(/^\/api\/upload-sessions\//);
         const controlRequest = fetchMock.mock.calls.find(([url]) =>
             String(url).startsWith(`${API_URL}/upload-sessions`),
         );
@@ -725,12 +709,12 @@ describe("direct upload sessions", () => {
         ).toBe("include");
     });
 
-    it("retries a failed transfer against a refreshed upload URL", async () => {
+    it("retries a failed API transfer", async () => {
+        let attempts = 0;
         const server = installSuccessfulSessionServer({
-            rotateUrlsOnRefresh: true,
-            storageUpload: (url) =>
+            storageUpload: () =>
                 new Response(null, {
-                    status: url.includes("/refreshed/") ? 200 : 503,
+                    status: ++attempts > 1 ? 204 : 503,
                 }),
         });
 
@@ -743,8 +727,7 @@ describe("direct upload sessions", () => {
         expect(outcomes).toMatchObject([{ status: "completed" }]);
         const storageUrls = server.storageRequests.map(({ url }) => url);
         expect(storageUrls).toHaveLength(2);
-        expect(storageUrls[0]).not.toBe(storageUrls[1]);
-        expect(storageUrls[1]).toContain("/refreshed/");
+        expect(storageUrls[0]).toBe(storageUrls[1]);
     });
 
     it("aborts the batch without reporting an unconfirmed upload", async () => {

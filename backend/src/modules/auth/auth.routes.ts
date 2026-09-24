@@ -5,6 +5,9 @@ import { requireAuth } from "../../middleware/auth";
 import { asyncRoute, routerErrorHandler } from "../../middleware/asyncRoute";
 import { requireTrustedOrigin } from "../../middleware/trustedOrigin";
 import { bootstrapAdmin, credentialsSchema, currentUser, emailSchema, passwordSchema, signInWithPassword, signOut, updateEmail, updatePassword } from "./auth.service";
+import { acknowledgeStorageRecoveryKey, pendingStorageRecoveryKey } from "../../config/secrets";
+import { can } from "../../lib/authz";
+import { isFirstAdmin } from "./auth.service";
 
 export const authRouter = Router();
 authRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
@@ -33,6 +36,27 @@ if (process.env.NODE_ENV !== "production") {
     res.status(201).json({ user: publicAuthUser(data.user) });
   }));
 }
+
+async function recoveryAdmin(res: Response): Promise<boolean> {
+  const user = {
+    id: res.locals.userId as string,
+    role: res.locals.userRole === "admin" ? "admin" as const : "member" as const,
+    status: "active" as const,
+  };
+  return can(user, "admin", { kind: "system" }) && await isFirstAdmin(user.id);
+}
+
+authRouter.post("/storage-recovery/pending", requireAuth, asyncRoute(async (_req, res) => {
+  if (!(await recoveryAdmin(res))) return void res.status(404).json({ detail: "Recovery key not available" });
+  const recoveryKey = await pendingStorageRecoveryKey();
+  res.json({ recovery_key: recoveryKey });
+}));
+
+authRouter.post("/storage-recovery/acknowledge", requireAuth, asyncRoute(async (_req, res) => {
+  if (!(await recoveryAdmin(res))) return void res.status(404).json({ detail: "Recovery key not available" });
+  await acknowledgeStorageRecoveryKey();
+  res.status(204).end();
+}));
 
 authRouter.get("/me", requireAuth, asyncRoute(async (req, res) => {
   const { user, error } = await currentUser(res.locals.authClient);

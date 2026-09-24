@@ -1,11 +1,10 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
-  getSignedUploadUrl: vi.fn(),
   ensureDocAccess: vi.fn(),
   checkWorkflowAccess: vi.fn(),
   /** The row the `documents` read answers with. */
@@ -53,7 +52,7 @@ vi.mock("../../lib/access", async (importOriginal) => ({
 
 vi.mock("../../lib/storage", () => ({
   storageEnabled: true,
-  getSignedUploadUrl: mocks.getSignedUploadUrl,
+  storage: { put: vi.fn(), delete: vi.fn() },
   copyFile: vi.fn(),
   deleteFile: vi.fn(),
   headFile: vi.fn(),
@@ -81,10 +80,9 @@ describe("upload session routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockResolvedValue({ error: null });
-    mocks.getSignedUploadUrl.mockResolvedValue("https://upload.example/signed");
   });
 
-  it("creates one atomic session reservation and returns direct PUT URLs", async () => {
+  it("creates one atomic session reservation without storage addresses", async () => {
     const response = await request(app)
       .post("/upload-sessions")
       .send(manifest(2));
@@ -96,26 +94,13 @@ describe("upload session routes", () => {
       status: "pending_upload",
     });
     expect(response.body.files).toHaveLength(2);
-    expect(response.body.files[0].upload).toMatchObject({
-      method: "PUT",
-      headers: { "Content-Type": "application/pdf" },
-    });
+    expect(response.body.files[0]).not.toHaveProperty("upload");
+    expect(response.body.files[0]).not.toHaveProperty("staging_storage_path");
+    expect(response.body.files[0]).not.toHaveProperty("sealed_storage_path");
     expect(mocks.rpc).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith(
       "create_upload_session",
       expect.objectContaining({ target_hourly_session_limit: 50 }),
-    );
-    expect(mocks.getSignedUploadUrl).toHaveBeenCalledTimes(2);
-    // The declared byte count is signed into the URL; the browser supplies the
-    // matching Content-Length itself, so it is not echoed in the descriptor.
-    expect(mocks.getSignedUploadUrl).toHaveBeenCalledWith(
-      expect.any(String),
-      "application/pdf",
-      1234,
-      expect.any(Number),
-    );
-    expect(response.body.files[0].upload.headers).not.toHaveProperty(
-      "Content-Length",
     );
   });
 
@@ -126,7 +111,6 @@ describe("upload session routes", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.rpc).not.toHaveBeenCalled();
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported file extensions before reserving a session", async () => {
@@ -143,12 +127,11 @@ describe("upload session routes", () => {
       detail: expect.stringContaining("Unsupported file type: txt"),
     });
     expect(mocks.rpc).not.toHaveBeenCalled();
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
-  it("returns an explicit 413 when a declared file exceeds 100 MB", async () => {
+  it("returns an explicit 413 when a declared file exceeds 256 MB", async () => {
     const requestBody = manifest();
-    requestBody.files[0].size_bytes = 100 * 1024 * 1024 + 1;
+    requestBody.files[0].size_bytes = 256 * 1024 * 1024 + 1;
 
     const response = await request(app)
       .post("/upload-sessions")
@@ -157,7 +140,6 @@ describe("upload session routes", () => {
     expect(response.status).toBe(413);
     expect(response.body.code).toBe("upload_file_too_large");
     expect(mocks.rpc).not.toHaveBeenCalled();
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("blocks a concurrent upload that targets the same mutable item", async () => {
@@ -169,7 +151,6 @@ describe("upload session routes", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.code).toBe("upload_target_busy");
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("applies the upload rate limit to sessions instead of individual files", async () => {
@@ -184,7 +165,6 @@ describe("upload session routes", () => {
     expect(response.status).toBe(429);
     expect(response.body.code).toBe("upload_session_rate_limit_exceeded");
     expect(mocks.rpc).toHaveBeenCalledOnce();
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("returns 404 for an invalid session id before querying the database", async () => {
@@ -231,7 +211,6 @@ describe("upload session destination access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockResolvedValue({ error: null });
-    mocks.getSignedUploadUrl.mockResolvedValue("https://upload.example/signed");
     mocks.documentRow = {
       data: {
         id: DOCUMENT_ID,
@@ -263,7 +242,6 @@ describe("upload session destination access", () => {
     );
     // No session was reserved and no upload URL was minted.
     expect(mocks.rpc).not.toHaveBeenCalled();
-    expect(mocks.getSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("keeps 404 for a caller with no verdict at all", async () => {
@@ -342,7 +320,6 @@ describe("upload session workflow destination", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.rpc.mockResolvedValue({ error: null });
-    mocks.getSignedUploadUrl.mockResolvedValue("https://upload.example/signed");
     // The one-row read answers the `workflows` lookup here.
     mocks.documentRow = {
       data: { id: WORKFLOW_ID, type: "assistant" },

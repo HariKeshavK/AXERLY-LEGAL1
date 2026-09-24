@@ -143,3 +143,19 @@ export function unenrollMfa(factorId: string) {
         },
     );
 }
+
+export async function pendingStorageRecoveryKey(): Promise<string | null> {
+    try {
+        const response = await authRequest<{ recovery_key: string | null }>(
+            "/storage-recovery/pending", { method: "POST" },
+        );
+        return response.recovery_key;
+    } catch (error) {
+        if (error instanceof AuthApiError && error.status === 404) return null;
+        throw error;
+    }
+}
+
+export async function acknowledgeStorageRecoveryKey(): Promise<void> {
+    await authRequest<void>("/storage-recovery/acknowledge", { method: "POST" });
+}

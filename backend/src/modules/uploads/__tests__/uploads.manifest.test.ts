@@ -55,7 +55,7 @@ describe("parseUploadSessionRequest", () => {
     ).toThrow(UploadSessionValidationError);
   });
 
-  it("rejects a file over the individual 100 MB limit", () => {
+  it("rejects a file over the individual 256 MB limit", () => {
     expect(() =>
       parseUploadSessionRequest(
         documentRequest(1, MAX_UPLOAD_SIZE_BYTES + 1),

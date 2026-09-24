@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import type {
   ApiKeyStatus,
   Document,
@@ -244,7 +245,6 @@ async function uploadSessionFiles<T>(args: {
     signal: args.signal,
     transport: {
       apiRequest,
-      fetchStorage: (...fetchArgs) => clientConfig.fetchImpl(...fetchArgs),
       shouldRetryControlRequest: createControlRequestRetryPolicy((error) =>
         error instanceof MikeApiError
           ? { status: error.status, code: error.code }

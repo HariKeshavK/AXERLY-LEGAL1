@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { mkdtemp, readdir, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -166,7 +167,7 @@ describe("workflow catalog synchronization", () => {
     try {
       await expect(
         syncWorkflowCatalog({ rpc } as never, { temporaryRoot, fetchImpl }),
-      ).rejects.toThrow("require configured S3-compatible storage");
+      ).rejects.toThrow("require encrypted local storage");
       expect(rpc).not.toHaveBeenCalled();
       await expect(readdir(temporaryRoot)).resolves.toEqual([]);
     } finally {

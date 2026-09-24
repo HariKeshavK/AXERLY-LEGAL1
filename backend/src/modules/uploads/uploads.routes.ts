@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // HTTP layer for the uploads module.
 //
 // Handlers here own only what is genuinely HTTP: the two rate limiters, the
@@ -6,9 +6,8 @@
 // mapping of a service result onto a status code and JSON body. Every query,
 // storage call, and state transition lives behind uploads.service.ts.
 //
-// File bytes never reach Express: the client PUTs them straight to object
-// storage against the signed URLs these endpoints hand out, so the JSON body
-// limit in app.ts stays small no matter how large the upload is.
+// File bytes stream through the authenticated Express API. The upload route
+// uses the raw request stream, so the JSON body limit does not buffer files.
 
 import { randomUUID } from "node:crypto";
 import rateLimit from "express-rate-limit";
@@ -34,7 +33,7 @@ import {
   completeUploadSessionFile,
   createUploadSession,
   getUploadSession,
-  refreshUploadUrls,
+  receiveUploadSessionFile,
 } from "./uploads.sessions";
 import type { UploadFailure } from "./uploads.shared";
 
@@ -143,6 +142,26 @@ uploadSessionsRouter.post(
   }),
 );
 
+// PUT /upload-sessions/:sessionId/files/:fileId
+uploadSessionsRouter.put(
+  "/:sessionId/files/:fileId",
+  requireAuth,
+  uploadSessionMutationLimiter,
+  asyncRoute(async (req, res) => {
+    const rawLength = req.get("content-length");
+    const contentLength = rawLength ? Number.parseInt(rawLength, 10) : undefined;
+    const result = await receiveUploadSessionFile(createDatabase(), {
+      sessionId: req.params.sessionId,
+      fileId: req.params.fileId,
+      userId: res.locals.userId as string,
+      body: req,
+      contentLength: Number.isFinite(contentLength) ? contentLength : undefined,
+    });
+    if (!result.ok) return void sendUploadFailure(res, result);
+    res.status(204).end();
+  }),
+);
+
 // GET /upload-sessions/:sessionId
 uploadSessionsRouter.get(
   "/:sessionId",
@@ -152,23 +171,6 @@ uploadSessionsRouter.get(
     const userId = res.locals.userId as string;
     const db = createDatabase();
     const result = await getUploadSession(db, req.params.sessionId, userId);
-    if (!result.ok) return void sendUploadFailure(res, result);
-    res.json(result.data);
-  }),
-);
-
-// POST /upload-sessions/:sessionId/urls
-uploadSessionsRouter.post(
-  "/:sessionId/urls",
-  requireAuth,
-  uploadSessionMutationLimiter,
-  asyncRoute(async (req, res) => {
-    if (!storageEnabled) {
-      return void res.status(503).json({ detail: "Storage is not configured" });
-    }
-    const userId = res.locals.userId as string;
-    const db = createDatabase();
-    const result = await refreshUploadUrls(db, req.params.sessionId, userId);
     if (!result.ok) return void sendUploadFailure(res, result);
     res.json(result.data);
   }),

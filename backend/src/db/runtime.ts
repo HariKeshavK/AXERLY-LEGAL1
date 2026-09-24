@@ -1,7 +1,8 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 import { loadOrCreateSecrets } from "../config/secrets";
 import { embeddedPostgresManager, type EmbeddedPostgresInfo } from "./embedded";
 import { runMigrations } from "./migrations";
+import { sweepStorageTempFiles } from "../lib/storage";
 
 const APP_USER = "axerly_app";
 
@@ -23,6 +24,7 @@ export interface DatabaseRuntime {
 export async function prepareDatabaseRuntime(options: {
   forceEmbedded?: boolean;
 } = {}): Promise<DatabaseRuntime> {
+  await sweepStorageTempFiles();
   const configuredUrl = process.env.DATABASE_URL?.trim();
   if (configuredUrl && !options.forceEmbedded) {
     const secrets = await loadOrCreateSecrets();

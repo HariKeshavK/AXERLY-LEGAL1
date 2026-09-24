@@ -1,6 +1,6 @@
 # AXERLY modified 2026-09-24.
 # MikeOSS — full local stack, one `docker compose up`. No external accounts.
-# Supabase is embedded (db + auth + rest + gateway); storage is RustFS.
+# Legacy development stack. File bytes use the encrypted AXERLY data volume.
 # The only thing you must supply is one model API key in backend/.env.
 #
 # JWT secret + anon/service_role keys below are the well-known Supabase local
@@ -211,41 +211,6 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
     restart: unless-stopped
 
-  # --- S3-compatible object storage (RustFS, MinIO alternative).
-  storage:
-    image: rustfs/rustfs:latest
-    ports:
-      # Loopback only: creds below are the default admin pair.
-      - "127.0.0.1:${STORAGE_PORT:-9000}:9000"
-      - "127.0.0.1:${STORAGE_CONSOLE_PORT:-9001}:9001"
-    environment:
-      RUSTFS_VOLUMES: /data
-      RUSTFS_ADDRESS: 0.0.0.0:9000
-      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
-      RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_ACCESS_KEY: rustfsadmin
-      RUSTFS_SECRET_KEY: rustfsadmin
-    volumes:
-      - storage_data:/data
-    restart: unless-stopped
-
-  createbucket:
-    image: amazon/aws-cli
-    depends_on:
-      - storage
-    environment:
-      AWS_ACCESS_KEY_ID: rustfsadmin
-      AWS_SECRET_ACCESS_KEY: rustfsadmin
-      AWS_DEFAULT_REGION: us-east-1
-    volumes:
-      - ./docker/storage-cors.json:/storage-cors.json:ro
-    entrypoint: /bin/sh
-    command: >
-      -c "until aws --endpoint-url http://storage:9000 s3 ls; do echo 'waiting for storage'; sleep 2; done;
-          aws --endpoint-url http://storage:9000 s3 mb s3://mike || true;
-          aws --endpoint-url http://storage:9000 s3api put-bucket-cors --bucket mike --cors-configuration file:///storage-cors.json"
-    restart: "no"
-
   # --- Redis: backs the BullMQ job queues (conversion, extraction, fast
   # delivery for background jobs). NEW INSTALLS get it out of the box, which
   # is why the backend below ships with the ASYNC_* flags on. Existing
@@ -282,15 +247,12 @@ services:
     environment:
       - SUPABASE_URL=http://gateway:8000
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
-      - R2_ENDPOINT_URL=http://storage:9000
-      - R2_ACCESS_KEY_ID=rustfsadmin
-      - R2_SECRET_ACCESS_KEY=rustfsadmin
-      - R2_BUCKET_NAME=mike
+      - AXERLY_DATA_DIR=/axerly-data
+    volumes:
+      - axerly_data:/axerly-data
     command: ["npm", "run", "sync:workflows"]
     depends_on:
       db-init:
-        condition: service_completed_successfully
-      createbucket:
         condition: service_completed_successfully
       gateway:
         condition: service_healthy
@@ -326,11 +288,7 @@ services:
       - SUPABASE_URL=http://gateway:8000
       - SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
-      - R2_ENDPOINT_URL=http://storage:9000
-      - R2_PUBLIC_ENDPOINT_URL=${R2_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
-      - R2_ACCESS_KEY_ID=rustfsadmin
-      - R2_SECRET_ACCESS_KEY=rustfsadmin
-      - R2_BUCKET_NAME=mike
+      - AXERLY_DATA_DIR=/axerly-data
       # Local Ollama running on the host. Override OLLAMA_MODEL to change the tag.
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       # Durable job queues: fresh compose installs run BullMQ-on-Redis for
@@ -346,6 +304,8 @@ services:
       # container/machine, set WORKERS_MODE=none here and enable the
       # `worker` service below.
       - WORKERS_MODE=${WORKERS_MODE:-thread}
+    volumes:
+      - axerly_data:/axerly-data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -379,10 +339,7 @@ services:
   #   environment:
   #     - SUPABASE_URL=http://gateway:8000
   #     - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}
-  #     - R2_ENDPOINT_URL=http://storage:9000
-  #     - R2_ACCESS_KEY_ID=rustfsadmin
-  #     - R2_SECRET_ACCESS_KEY=rustfsadmin
-  #     - R2_BUCKET_NAME=mike
+  #     - AXERLY_DATA_DIR=/axerly-data
   #     - REDIS_URL=${REDIS_URL:-redis://redis:6379}
   #     - ASYNC_DOCUMENT_CONVERSION=${ASYNC_DOCUMENT_CONVERSION:-true}
   #     - ASYNC_TABULAR_EXTRACTION=${ASYNC_TABULAR_EXTRACTION:-true}
@@ -426,5 +383,5 @@ services:
 
 volumes:
   db_data:
-  storage_data:
+  axerly_data:
   redis_data:

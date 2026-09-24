@@ -1,8 +1,8 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
 // Read/serve paths for documents: inline display bytes, zip bundling, signed
 // download URLs, and the raw source bytes of a version.
 
-import { getSignedUrl, headFile } from "../../lib/storage";
+import { headFile } from "../../lib/storage";
 import {
     attachActiveVersionPaths,
     loadActiveVersion,
@@ -394,9 +394,10 @@ export async function getDownloadUrl(
         active.version_number,
         active.source === "assistant_edit",
     );
-    const url = await getSignedUrl(active.storage_path, 3600, downloadFilename);
-    if (!url)
-        return { ok: false, kind: "storage", detail: "Storage not configured" };
+    const query = versionIdParam
+        ? `?version_id=${encodeURIComponent(versionIdParam)}`
+        : "";
+    const url = `/api/single-documents/${encodeURIComponent(documentId)}/file${query}`;
 
     return {
         ok: true,
