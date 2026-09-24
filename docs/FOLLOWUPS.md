@@ -28,3 +28,9 @@
 - P7: use all memberships from `teamIdsForUser` to union model entitlements and add explicit team targets to the existing Library/Project sharing model. Team membership currently grants no document or project access by itself.
 - If an existing installation has multiple organizations, design an explicit, reviewed, access-preserving migration. Migration `0004` intentionally refuses to merge tenants automatically.
 - Remove or repurpose the now-unmounted legacy Create Organization modal and obsolete frontend create/delete-org API helpers as part of the P6 onboarding redesign.
+
+## Licensing prerequisite before P6 production setup
+
+- Keep the nested `licensing-server/` checkout out of the public app repository **and** the future Electron packaging inputs; `.gitignore` alone does not exclude installer files.
+- After L-A deploys the ES256 license Edge Function and supplies its separate public JWK, wire the app's verifier into a backend-enforced activation/setup flow. Until then, production firm creation remains unavailable.
+- Revisit license-signing key rotation before production: a single pinned public key cannot validate older tokens after immediate private-key replacement.

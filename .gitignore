@@ -52,3 +52,6 @@ backend/supabase/*
 
 # Local review artifact; it is a nested repository, not application source.
 /pr-267-analysis-site/
+
+# Private licensing-function repository: never stage it in the public app.
+/licensing-server/
