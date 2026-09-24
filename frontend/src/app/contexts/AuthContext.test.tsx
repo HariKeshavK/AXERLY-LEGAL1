@@ -1,16 +1,15 @@
+// AXERLY modified 2026-09-24.
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { AUTH_SESSION_INVALIDATED_EVENT } from "@/app/lib/authEvents";
 
 const {
-    clearLegacyBrowserAuthStorage,
     getAuthSession,
     logout,
     updateAuthEmail,
     updateAuthPassword,
 } = vi.hoisted(() => ({
-    clearLegacyBrowserAuthStorage: vi.fn(),
     getAuthSession: vi.fn(),
     logout: vi.fn(),
     updateAuthEmail: vi.fn(),
@@ -18,7 +17,6 @@ const {
 }));
 
 vi.mock("@/app/lib/authApi", () => ({
-    clearLegacyBrowserAuthStorage,
     getAuthSession,
     logout,
     updateAuthEmail,
@@ -28,8 +26,8 @@ vi.mock("@/app/lib/authApi", () => ({
 const user = {
     id: "user-1",
     email: "lawyer@example.test",
-    pendingEmail: null,
-    createdWithGoogle: false,
+    role: "member" as const,
+    status: "active" as const,
 };
 
 function Consumer() {
@@ -53,7 +51,6 @@ describe("AuthProvider", () => {
     beforeEach(() => {
         getAuthSession.mockReset();
         logout.mockReset();
-        clearLegacyBrowserAuthStorage.mockReset();
         updateAuthEmail.mockReset();
         updateAuthPassword.mockReset();
         window.localStorage.clear();

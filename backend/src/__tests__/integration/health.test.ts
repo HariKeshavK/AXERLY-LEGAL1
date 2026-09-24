@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import request from "supertest";
 
@@ -113,8 +113,8 @@ describe("GET /manifest-signing-key", () => {
 });
 
 describe("404 handling", () => {
-    it("returns 404 for unknown routes", async () => {
+    it("does not reveal unknown routes to unauthenticated callers", async () => {
         const res = await request(app).get("/this-route-does-not-exist");
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(401);
     });
 });

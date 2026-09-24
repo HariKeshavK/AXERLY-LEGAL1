@@ -1,10 +1,10 @@
+// AXERLY modified 2026-09-24.
 export interface AuthUser {
     id: string;
     email: string;
-    pendingEmail: string | null;
-    createdWithGoogle: boolean;
+    role: "admin" | "member";
+    status: "active" | "disabled";
 }
-
 export interface MfaFactor {
     id: string;
     friendly_name?: string | null;
@@ -25,12 +25,16 @@ export class AuthApiError extends Error {
 }
 
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const csrfCookie = typeof document === "undefined" ? undefined : document.cookie.split(";").map((part) => part.trim()).find((part) => part.startsWith("__Host-axerly-csrf="));
+    const csrf = csrfCookie ? decodeURIComponent(csrfCookie.slice(csrfCookie.indexOf("=") + 1)) : undefined;
     const response = await fetch(`/api/auth${path}`, {
         ...init,
         credentials: "include",
         cache: "no-store",
         headers: {
             ...(init?.body ? { "Content-Type": "application/json" } : {}),
+            ...(!["GET", "HEAD", "OPTIONS"].includes(method) && csrf ? { "X-CSRF-Token": csrf } : {}),
             ...(init?.headers as Record<string, string> | undefined),
         },
     });
@@ -53,7 +57,7 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getAuthSession(): Promise<AuthUser | null> {
     try {
-        return (await authRequest<{ user: AuthUser }>("/session")).user;
+        return (await authRequest<{ user: AuthUser }>("/me")).user;
     } catch (error) {
         if (error instanceof AuthApiError && error.status === 401) return null;
         throw error;
@@ -67,43 +71,6 @@ export async function login(email: string, password: string) {
     });
 }
 
-export async function signup(email: string, password: string, next: string) {
-    return authRequest<{
-        user: AuthUser;
-        requiresEmailConfirmation: boolean;
-    }>("/signup", {
-        method: "POST",
-        body: JSON.stringify({ email, password, next }),
-    });
-}
-
-export async function startGoogleOAuth(next: string) {
-    return authRequest<{ url: string }>("/oauth", {
-        method: "POST",
-        body: JSON.stringify({ provider: "google", next }),
-    });
-}
-
-export function startSso(next: string, email: string) {
-    return authRequest<{ url: string }>("/oauth", {
-        method: "POST",
-        body: JSON.stringify({ provider: "sso", next, email }),
-    });
-}
-
-export async function exchangeAuthCode(code: string) {
-    return authRequest<{ user: AuthUser }>("/exchange", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-    });
-}
-
-export async function requestPasswordReset(email: string) {
-    return authRequest<void>("/password-reset", {
-        method: "POST",
-        body: JSON.stringify({ email }),
-    });
-}
 
 export async function logout(scope: "local" | "global" = "local") {
     return authRequest<void>("/logout", {
@@ -175,16 +142,4 @@ export function unenrollMfa(factorId: string) {
             method: "DELETE",
         },
     );
-}
-
-export function clearLegacyBrowserAuthStorage() {
-    if (typeof window === "undefined") return;
-    for (const storage of [window.localStorage, window.sessionStorage]) {
-        for (let index = storage.length - 1; index >= 0; index -= 1) {
-            const key = storage.key(index);
-            if (key && /(?:^|-)auth-token(?:$|-)|supabase.*auth/i.test(key)) {
-                storage.removeItem(key);
-            }
-        }
-    }
 }

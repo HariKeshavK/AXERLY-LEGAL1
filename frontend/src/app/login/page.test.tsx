@@ -1,12 +1,12 @@
+// AXERLY modified 2026-09-24.
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "./page";
 
-const { login, startGoogleOAuth, refreshSession, replace, push } = vi.hoisted(
+const { login, refreshSession, replace, push } = vi.hoisted(
     () => ({
         login: vi.fn(),
-        startGoogleOAuth: vi.fn(),
         refreshSession: vi.fn(),
         replace: vi.fn(),
         push: vi.fn(),
@@ -19,7 +19,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/lib/authApi", () => ({
     login,
-    startGoogleOAuth,
 }));
 
 vi.mock("@/app/contexts/AuthContext", () => ({
@@ -37,7 +36,6 @@ vi.mock("@/app/components/site-logo", () => ({
 describe("LoginPage", () => {
     beforeEach(() => {
         login.mockReset();
-        startGoogleOAuth.mockReset();
         refreshSession.mockReset();
         refreshSession.mockResolvedValue(null);
         replace.mockReset();
@@ -64,21 +62,4 @@ describe("LoginPage", () => {
         expect(push).toHaveBeenCalledWith("/onboarding/profile");
     });
 
-    it("places Google and SSO after the primary login action", () => {
-        render(<LoginPage />);
-
-        const login = screen.getByRole("button", { name: "Log in" });
-        const google = screen.getByRole("button", {
-            name: "Continue with Google",
-        });
-        const sso = screen.getByRole("button", { name: "Continue with SSO" });
-        expect(
-            login.compareDocumentPosition(google) &
-                Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
-        expect(
-            google.compareDocumentPosition(sso) &
-                Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
-    });
 });

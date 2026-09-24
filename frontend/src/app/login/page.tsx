@@ -1,11 +1,11 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/app/lib/authApi";
 import { Input } from "@/app/components/ui/input";
 import { PillButtonUI } from "@/shared/ui/PillButtonUI";
-import Link from "next/link";
 import { SiteLogo } from "@/app/components/site-logo";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { cn } from "@/app/lib/utils";
@@ -13,15 +13,11 @@ import {
     authGlassCardClassName,
     authInputClassName,
 } from "@/app/components/auth/authStyles";
-import { AuthDivider } from "@/app/components/auth/AuthDivider";
-import { SsoAuthButton } from "@/app/components/auth/SsoAuthButton";
-import { GoogleAuthButton } from "@/app/components/auth/GoogleAuthButton";
 import { FieldLabel } from "@/app/components/ui/form-field";
 import { knownErrorCodeMessage } from "@/app/lib/userFacingError";
 
 const LOGIN_ERROR_MESSAGES = {
     invalid_credentials: "The email or password is incorrect.",
-    email_not_confirmed: "Confirm your email address before logging in.",
 } as const;
 
 export default function LoginPage() {
@@ -91,17 +87,7 @@ export default function LoginPage() {
                         </div>
 
                         <div>
-                            <div className="flex items-start justify-between gap-3">
-                                <FieldLabel htmlFor="password">
-                                    Password
-                                </FieldLabel>
-                                <Link
-                                    href="/forgot-password"
-                                    className="text-xs font-medium text-gray-500 transition-colors hover:text-gray-950"
-                                >
-                                    Forgot password?
-                                </Link>
-                            </div>
+                            <FieldLabel htmlFor="password">Password</FieldLabel>
                             <Input
                                 id="password"
                                 type="password"
@@ -140,23 +126,7 @@ export default function LoginPage() {
                                 {loading ? "Logging in..." : "Log in"}
                             </PillButtonUI>
                         </div>
-                        <AuthDivider />
-                        <GoogleAuthButton
-                            onError={setError}
-                            disabled={loading}
-                            onLoadingChange={setLoading}
-                        />
-                        <SsoAuthButton disabled={loading} />
                     </form>
-                </div>
-                <div className="text-center text-sm text-gray-500">
-                    Don&apos;t have an account?{" "}
-                    <Link
-                        href="/signup"
-                        className="font-medium transition-colors hover:text-gray-950"
-                    >
-                        Sign up
-                    </Link>
                 </div>
             </div>
         </div>

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 /**
  * Final outbound boundary, after SDK processors and before transport serialization.
  * Mirrored in frontend/src/shared/lib/sentryPrivacy.ts; the sync test guards drift.
@@ -47,7 +48,7 @@ export function diagnosticRoute(value: string): string {
 function codePath(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const clean = value.split(/[?#]/)[0]!.replace(/\\/g, '/');
-  const bundle = clean.match(/(?:^|\/)((?:taskpane|commands|oauth-dialog|\d+)(?:\.[0-9a-f]{8})?\.js)$/);
+  const bundle = clean.match(/(?:^|\/)((?:taskpane|commands|\d+)(?:\.[0-9a-f]{8})?\.js)$/);
   if (bundle) return bundle[1];
   const start = clean.search(/(?:^|\/)(?:backend|frontend|word-addin|packages|src|dist|node_modules|_next)\//);
   const path = start >= 0 ? clean.slice(start).replace(/^\//, '') : clean;

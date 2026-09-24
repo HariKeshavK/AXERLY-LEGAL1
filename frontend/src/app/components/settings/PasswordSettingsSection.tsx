@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useState } from "react";
 import { authInputClassName } from "@/app/components/auth/authStyles";
@@ -10,8 +11,6 @@ import { Modal } from "@/app/components/modals/Modal";
 import { Input } from "@/app/components/ui/input";
 import { PillButtonUI } from "@/shared/ui/PillButtonUI";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { useUserProfile } from "@/app/contexts/UserProfileContext";
-import { requestPasswordReset } from "@/app/lib/authApi";
 import { SettingsCard } from "./SettingsCard";
 import { SettingsHeading } from "./SettingsHeading";
 import { SettingsRow } from "./SettingsRow";
@@ -19,18 +18,13 @@ import { SettingsDescription, SettingsLabel } from "./SettingsText";
 import { FieldLabel } from "@/app/components/ui/form-field";
 
 export function PasswordSettingsSection() {
-  const { user, setPassword } = useAuth();
-  const { profile, syncPasswordSet } = useUserProfile();
+  const { setPassword } = useAuth();
   const [setPasswordOpen, setSetPasswordOpen] = useState(false);
   const [password, setPasswordValue] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordSetError, setPasswordSetError] = useState<string | null>(null);
   const [passwordStatus, setPasswordStatus] = useState<string | null>(null);
-  const [passwordResetSending, setPasswordResetSending] = useState(false);
-
-  const needsInitialPassword =
-    user?.createdWithGoogle === true && profile?.passwordSet !== true;
 
   async function addPassword() {
     setPasswordSetError(null);
@@ -46,38 +40,16 @@ export function PasswordSettingsSection() {
     setPasswordSaving(true);
     try {
       await setPassword(password);
-      const synced = await syncPasswordSet();
-      if (!synced) {
-        throw new Error(
-          "Your password was set, but its account status could not be refreshed. Reload the page and try again.",
-        );
-      }
       setPasswordValue("");
       setConfirmPassword("");
       setSetPasswordOpen(false);
-      setPasswordStatus("Password added to your account.");
+      setPasswordStatus("Password changed. Sign in again with the new password.");
     } catch (error) {
       setPasswordSetError(
         error instanceof Error ? error.message : "Unable to set your password.",
       );
     } finally {
       setPasswordSaving(false);
-    }
-  }
-
-  async function sendPasswordReset() {
-    if (!user?.email || passwordResetSending) return;
-    setPasswordResetSending(true);
-    setPasswordStatus(null);
-    try {
-      await requestPasswordReset(user.email);
-      setPasswordStatus(`Password-reset instructions sent to ${user.email}.`);
-    } catch {
-      setPasswordStatus(
-        "Unable to send a password-reset email right now. Please try again.",
-      );
-    } finally {
-      setPasswordResetSending(false);
     }
   }
 
@@ -96,12 +68,10 @@ export function PasswordSettingsSection() {
         <SettingsRow>
           <div className="min-w-0 space-y-1">
             <SettingsLabel>
-              {needsInitialPassword ? "Set password" : "Reset password"}
+              Change password
             </SettingsLabel>
             <SettingsDescription>
-              {needsInitialPassword
-                ? "Add a password to sign in with your email and change your account email."
-                : `Send a secure password-reset link to ${user?.email}.`}
+              Set a new password. All existing sessions will be revoked.
             </SettingsDescription>
             {passwordStatus && (
               <p className="text-xs text-gray-500">{passwordStatus}</p>
@@ -110,19 +80,11 @@ export function PasswordSettingsSection() {
           <PillButtonUI
             tone="black"
             size="sm"
-            onClick={() =>
-              needsInitialPassword
-                ? setSetPasswordOpen(true)
-                : void sendPasswordReset()
-            }
-            disabled={passwordResetSending || !user?.email || passwordSaving}
+            onClick={() => setSetPasswordOpen(true)}
+            disabled={passwordSaving}
             className="shrink-0"
           >
-            {needsInitialPassword
-              ? "Set password"
-              : passwordResetSending
-                ? "Sending..."
-                : "Send reset email"}
+            Change password
           </PillButtonUI>
         </SettingsRow>
       </SettingsCard>

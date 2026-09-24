@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import {
@@ -20,7 +20,7 @@ const { checkProjectAccess, checkWorkflowAccess, deleteUserProjects, getOrgRole 
 );
 
 // ---------------------------------------------------------------------------
-// Supabase + auth stubs, shared with the other route suites via ../helpers/.
+// Database and auth stubs, shared with the other route suites via ../helpers/.
 // Every suite here mounts `app`, which loads every router, so they all need the
 // same fakes; see helpers/supabaseMock.ts for how `supabaseState` (seeded in
 // beforeEach below) drives the responses.

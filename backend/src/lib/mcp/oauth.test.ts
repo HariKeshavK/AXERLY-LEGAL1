@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock only the two module-internal seams that would otherwise require a live
@@ -249,7 +250,7 @@ function makeRowStoreDb() {
 }
 
 describe("startUserMcpConnectorOAuth", () => {
-    // Any real deployment that reaches these flows has a Google OAuth client
+    // Any real deployment that reaches these flows has a Google connector client
     // configured (Google offers no dynamic registration); mirror that here so
     // the suite exercises the flow rather than the missing-client guard. The
     // guard itself is tested explicitly below.
@@ -291,7 +292,7 @@ describe("startUserMcpConnectorOAuth", () => {
         );
     });
 
-    it("fails fast with setup instructions when no Google OAuth client is configured", async () => {
+    it("fails fast with setup instructions when no Google connector client is configured", async () => {
         delete process.env.GOOGLE_MCP_OAUTH_CLIENT_ID;
         const connector = makeConnector(
             "https://drivemcp.googleapis.com/mcp/v1",

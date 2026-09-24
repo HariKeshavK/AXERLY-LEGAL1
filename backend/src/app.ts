@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import "dotenv/config";
 import { createHash, randomUUID } from "node:crypto";
 import express from "express";
@@ -34,6 +35,7 @@ import {
 import { configuredAllowedOrigins } from "./lib/origins";
 import { envInt } from "./lib/runtimeConfig";
 import { tagCurrentRequest } from "./lib/observability/sentry";
+import { authenticationBoundary } from "./middleware/routeSecurity";
 
 export const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -150,26 +152,8 @@ const authLoginAccountLimiter = makeLimiter({
   },
 });
 
-const authEmailLimiter = makeLimiter({
-  windowMs: hours(envInt("RATE_LIMIT_AUTH_EMAIL_WINDOW_HOURS", 1)),
-  max: envInt("RATE_LIMIT_AUTH_EMAIL_MAX", 10),
-  message: "Too many authentication requests. Please try again later.",
-});
-
-const authFlowLimiter = makeLimiter({
-  windowMs: minutes(envInt("RATE_LIMIT_AUTH_FLOW_WINDOW_MINUTES", 15)),
-  max: envInt("RATE_LIMIT_AUTH_FLOW_MAX", 30),
-  message: "Too many authentication requests. Please try again later.",
-});
-
-const authMfaLimiter = makeLimiter({
-  windowMs: minutes(envInt("RATE_LIMIT_AUTH_MFA_WINDOW_MINUTES", 15)),
-  max: envInt("RATE_LIMIT_AUTH_MFA_MAX", 20),
-  message: "Too many verification attempts. Please try again later.",
-});
-
 app.disable("x-powered-by");
-app.set("trust proxy", envInt("TRUST_PROXY_HOPS", 1));
+app.set("trust proxy", envInt("TRUST_PROXY_HOPS", 0));
 app.use((_req, res, next) => {
   const requestId = randomUUID();
   res.locals.requestId = requestId;
@@ -217,7 +201,7 @@ app.use(
       callback(null, !origin || allowedOrigins.has(origin));
     },
     credentials: true,
-    allowedHeaders: ["Authorization", "Content-Type"],
+    allowedHeaders: ["Content-Type", "X-CSRF-Token"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     // The request id is the correlation key between a user report, the
     // access log, and the Sentry event. Browsers hide response headers from
@@ -228,14 +212,11 @@ app.use(
 );
 
 app.use(generalLimiter);
+// AXERLY modified 2026-09-24: all routes below are authenticated unless they
+// are named in the explicit public allowlist.
+app.use(authenticationBoundary);
 
 app.post("/auth/login", authLoginIpLimiter);
-app.post(["/auth/signup", "/auth/password-reset"], authEmailLimiter);
-app.post(["/auth/oauth", "/auth/exchange", "/auth/handoff"], authFlowLimiter);
-app.post(
-  ["/auth/mfa/verify", "/auth/mfa/challenge-and-verify"],
-  authMfaLimiter,
-);
 
 app.post("/chat", chatLimiter);
 app.post("/word-chat", chatLimiter);

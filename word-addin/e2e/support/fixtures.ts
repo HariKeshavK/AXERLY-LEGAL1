@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 /**
  * Shared Playwright fixture for the Mike Word add-in E2E suite.
  *
@@ -192,7 +193,7 @@ export const test = base.extend<{ addin: Addin }>({
       return route.abort("blockedbyclient");
     });
 
-    await page.route("**/auth/session", (route, request) => {
+    await page.route("**/auth/me", (route, request) => {
       if (request.method() !== "GET") return route.fallback();
       if (!seed.token) {
         return route.fulfill({
@@ -208,8 +209,8 @@ export const test = base.extend<{ addin: Addin }>({
           user: {
             id: "test-user-id",
             email: "e2e@mike.local",
-            pendingEmail: null,
-            createdWithGoogle: false,
+            role: "member",
+            status: "active",
           },
         }),
       });
@@ -220,39 +221,6 @@ export const test = base.extend<{ addin: Addin }>({
       seed.token = undefined;
       seed.refreshToken = undefined;
       return route.fulfill({ status: 204, body: "" });
-    });
-
-    await page.route("**/auth/handoff", async (route, request) => {
-      if (request.method() !== "POST") return route.fallback();
-      const body = request.postDataJSON() as {
-        ticket?: unknown;
-        requestId?: unknown;
-      };
-      if (
-        typeof body.ticket !== "string" ||
-        !/^[A-Za-z0-9_-]{32,256}$/.test(body.ticket) ||
-        typeof body.requestId !== "string" ||
-        body.requestId.length < 16
-      ) {
-        return route.fulfill({
-          status: 400,
-          contentType: "application/json",
-          body: JSON.stringify({ detail: "Invalid authentication handoff" }),
-        });
-      }
-      seed.token = "google-cookie-session";
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          user: {
-            id: "test-user-id",
-            email: "e2e@mike.local",
-            pendingEmail: null,
-            createdWithGoogle: true,
-          },
-        }),
-      });
     });
 
     // Default the API-key status probe (fired on every authed mount by
@@ -604,8 +572,8 @@ export const test = base.extend<{ addin: Addin }>({
                 user: {
                   id: "test-user-id",
                   email: "e2e@mike.local",
-                  pendingEmail: null,
-                  createdWithGoogle: false,
+                  role: "member",
+                  status: "active",
                 },
               }),
             });

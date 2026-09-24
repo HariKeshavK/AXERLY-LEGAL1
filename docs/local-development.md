@@ -1,3 +1,4 @@
+<!-- AXERLY modified 2026-09-24. -->
 # Local development
 
 The recommended local setup uses Docker Compose to run the application and its
@@ -46,71 +47,13 @@ Open [http://localhost:3000](http://localhost:3000) and sign up.
 | Supabase API | `http://localhost:54321` | Auth and data API gateway |
 | Postgres | `localhost:54322` | Host access for database tools |
 | RustFS console | `http://localhost:9001` | `rustfsadmin` / `rustfsadmin` |
-| Mailpit | `http://localhost:8025` | Captured local auth email |
+## Local authentication
 
-The Supabase JWT secret and anon/`service_role` keys in `docker-compose.yml`
-and `.env.example` are well-known local demo values. They are convenient for
-localhost but must be regenerated before exposing an instance anywhere.
-
-## Local registration and email
-
-By default, a local email-and-password registration is automatically confirmed
-and the new user is signed in. Supabase Auth sends authentication email; the
-Mike backend does not send it directly.
-
-To exercise the confirmation-email flow, set
-`GOTRUE_MAILER_AUTOCONFIRM=false` in the root `.env`, then recreate Auth:
-
-```bash
-docker compose up -d --force-recreate auth
-```
-
-Open [Mailpit](http://localhost:8025) to read the confirmation message. Mailpit
-also captures local email-change and password-reset messages, and no email
-leaves your machine. These links pass through `/auth/callback` and return to the
-relevant app screen. Local signup autoconfirm remains enabled by default; turn
-it off only when you specifically want to test the confirmation flow.
-
-## Local Google authentication
-
-Google OAuth works with either local Supabase option. Create a Google **Web
-application** OAuth client and keep its secret out of Git.
-
-For Docker Compose, register this Google authorized redirect URI:
-
-```text
-http://localhost:54321/auth/v1/callback
-```
-
-Google OAuth is enabled by default. Set the client values in the root `.env`,
-or set `GOTRUE_EXTERNAL_GOOGLE_ENABLED=false` to opt out. Then recreate Auth:
-
-```env
-GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=<client-id>
-GOTRUE_EXTERNAL_GOOGLE_SECRET=<client-secret>
-```
-
-```bash
-docker compose up -d --force-recreate auth
-```
-
-For the Supabase CLI stack, register
-`http://127.0.0.1:54321/auth/v1/callback`, then set
-`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` and
-`SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` in `backend/.env`. Google OAuth
-is enabled by default; set `[auth.external.google].enabled` to `false` in
-`backend/supabase/config.toml` to opt out locally. Restart the stack after a
-configuration change:
-
-```bash
-cd backend
-supabase stop
-supabase start
-```
-
-The checked-in configuration already allows the web callback and the local
-Word dialog callback at `https://localhost:3200/oauth-dialog.html`. Add your
-Google account as an OAuth test user while the Google app remains in testing.
+Start embedded PostgreSQL with `npm run dev:db --prefix backend`. In a
+development build, create the first administrator once through
+`POST /auth/dev/bootstrap` using an email and a password of at least 12
+characters. The endpoint disappears in production and returns 404 after the
+first account exists. There is no public registration or email-link flow.
 
 ## Local models with Ollama
 

@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import React, {
     createContext,
@@ -11,7 +12,6 @@ import React, {
     ReactNode,
 } from "react";
 import {
-    clearLegacyBrowserAuthStorage,
     getAuthSession,
     logout,
     updateAuthEmail,
@@ -95,8 +95,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     useEffect(() => {
-        clearLegacyBrowserAuthStorage();
-
         const channel =
             typeof BroadcastChannel === "undefined"
                 ? null
@@ -220,9 +218,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const setPassword = useCallback(async (password: string) => {
-        const { user: nextUser } = await updateAuthPassword(password);
-        setUser(nextUser);
-    }, []);
+        await updateAuthPassword(password);
+        setUser(null);
+        setAuthError(null);
+        broadcastAuthState("signed-out");
+    }, [broadcastAuthState]);
 
     // A fresh object here re-renders every consumer of this context on every
     // provider render, sign-in state change or not. Each callback above is

@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import {
     useEffect,
@@ -10,7 +11,6 @@ import {
 import { Loader2 } from "lucide-react";
 import {
     challengeAndVerifyMfa,
-    getMfaAssurance,
     listMfaFactors,
 } from "@/app/lib/authApi";
 import { Modal } from "../modals/Modal";
@@ -27,8 +27,7 @@ const devLog = (...args: Parameters<typeof console.log>) => {
 };
 
 export async function needsMfaVerification() {
-    const data = await getMfaAssurance();
-    return data.nextLevel === "aal2" && data.currentLevel !== "aal2";
+    return false;
 }
 
 interface MfaVerificationPopupProps {

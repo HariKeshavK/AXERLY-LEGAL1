@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingGate } from "./OnboardingGate";
@@ -79,25 +80,12 @@ describe("OnboardingGate", () => {
         expect(state.replace).not.toHaveBeenCalled();
     });
 
-    it.each([
-        "/login/sso",
-        "/reset-password",
-        "/forgot-password",
-        "/verify-mfa",
-    ])(
-        "lets incomplete users reach the credential-recovery page %s",
-        (path) => {
-            state.pathname = path;
-            render(
-                <OnboardingGate>
-                    <div>Recovery page</div>
-                </OnboardingGate>,
-            );
-
-            expect(screen.getByText("Recovery page")).toBeInTheDocument();
-            expect(state.replace).not.toHaveBeenCalled();
-        },
-    );
+    it("lets incomplete users reach the login page", () => {
+        state.pathname = "/login";
+        render(<OnboardingGate><div>Login page</div></OnboardingGate>);
+        expect(screen.getByText("Login page")).toBeInTheDocument();
+        expect(state.replace).not.toHaveBeenCalled();
+    });
 
     it("redirects completed users away from onboarding", async () => {
         state.pathname = "/onboarding/practice";

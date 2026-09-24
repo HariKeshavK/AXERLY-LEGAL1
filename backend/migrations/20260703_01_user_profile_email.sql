@@ -1,6 +1,6 @@
--- AXERLY modified 2026-09-23.
+-- AXERLY modified 2026-09-24.
 -- Mirror public.users.email into user_profiles so backend sharing checks can
--- resolve one email without scanning Supabase Auth users.
+-- resolve one email without scanning authentication users.
 
 alter table public.user_profiles
   add column if not exists email text;

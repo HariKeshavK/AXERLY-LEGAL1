@@ -1,3 +1,4 @@
+<!-- AXERLY modified 2026-09-24. -->
 # Contributing
 
 Thanks for helping improve Mike. Please keep contributions small, focused, and easy to review.
@@ -113,7 +114,6 @@ npm run build --prefix frontend
 npm test --prefix backend            # backend unit + route integration tests (vitest)
 npm test --prefix frontend           # frontend component/hook tests (vitest + jsdom)
 npm run test:e2e                     # Playwright end-to-end suite — see docs/e2e-ci.md
-npm run test:stack --prefix backend  # gated: real-Supabase auth/access tests (run `supabase start` first)
 ```
 
 - New features and bug fixes should come with a test at the lowest layer that

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,8 +20,8 @@ const state = vi.hoisted(() => ({
     user: {
         id: "user-1",
         email: "alex@example.com",
-        pendingEmail: null,
-        createdWithGoogle: true,
+        role: "member" as const,
+        status: "active" as const,
     },
 }));
 
@@ -77,8 +78,7 @@ describe("SettingsPage Google email changes", () => {
         state.deleteAccount.mockResolvedValue(undefined);
         state.updateEmail.mockResolvedValue({
             ...state.user,
-            email: "alex@example.com",
-            pendingEmail: "new@example.com",
+            email: "new@example.com",
         });
         state.passwordSet = false;
         state.profile = {
@@ -128,29 +128,7 @@ describe("SettingsPage Google email changes", () => {
         expect(name).toHaveValue("Alexandra");
     });
 
-    it("directs Google-created accounts without a password to Security", async () => {
-        const user = userEvent.setup();
-        render(<SettingsPage />);
-
-        const email = screen.getByPlaceholderText("Enter your email");
-        expect(email).toBeDisabled();
-        await user.click(
-            screen.getByRole("button", { name: "Update" }),
-        );
-
-        const dialog = screen.getByRole("dialog", { name: "Change email" });
-        expect(dialog).toHaveTextContent(
-            "Your account was created with Google. To change your email, first add a password in Settings > Security > Password.",
-        );
-        expect(state.updateEmail).not.toHaveBeenCalled();
-
-        await user.click(
-            screen.getByRole("button", { name: "Go to Security" }),
-        );
-        expect(state.push).toHaveBeenCalledWith("/settings/security");
-    });
-
-    it("allows the email change after a password has been added", async () => {
+    it("allows a direct authenticated email change", async () => {
         state.passwordSet = true;
         const user = userEvent.setup();
         render(<SettingsPage />);

@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 /**
  * Error reporting for the Word add-in. Same policy as the web app (see
  * frontend/src/app/lib/errorReporting.ts and the shared scrubber it uses):
@@ -37,7 +38,7 @@ const scrubber = createEventScrubber({
 export const scrubEvent = scrubber.scrubEvent;
 
 /** `service`/`surface` distinguish the pane from its ribbon and OAuth pages. */
-export type AddinSurface = "taskpane" | "commands" | "oauth-dialog";
+export type AddinSurface = "taskpane" | "commands";
 
 export function addinSentryOptions(
   surface: AddinSurface,

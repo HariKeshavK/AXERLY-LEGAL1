@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 import { describe, expect, it } from "vitest";
 import {
   uploadConversionTimeoutMs,
@@ -29,15 +29,6 @@ describe("runtime authentication configuration", () => {
         API_PUBLIC_URL: "http://app.example.test/api",
       }),
     ).toThrow(/FRONTEND_URL must use https in production/);
-  });
-
-  it("requires a handoff encryption secret when Word auth is enabled", () => {
-    expect(() =>
-      validateRuntimeConfiguration({
-        ...validProduction,
-        WORD_ADDIN_URL: "https://word.example.test",
-      }),
-    ).toThrow(/AUTH_HANDOFF_ENCRYPTION_SECRET is required/);
   });
 
   it("rejects a missing direct database URL", () => {

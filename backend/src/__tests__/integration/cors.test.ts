@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
@@ -55,14 +55,12 @@ describe("CORS allowlist", () => {
         expect(res.status).toBeLessThan(500);
     });
 
-    it("limits preflight-approved request headers to Authorization and Content-Type", async () => {
+    it("limits preflight-approved request headers to content type and CSRF", async () => {
         const res = await request(app)
             .options("/chat")
             .set("Origin", ALLOWED_ORIGIN)
             .set("Access-Control-Request-Method", "POST")
             .set("Access-Control-Request-Headers", "Authorization");
-        expect(res.headers["access-control-allow-headers"]).toBe(
-            "Authorization,Content-Type",
-        );
+        expect(res.headers["access-control-allow-headers"]).toBe("Content-Type,X-CSRF-Token");
     });
 });

@@ -1,10 +1,10 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { PillButtonUI } from "@/shared/ui/PillButtonUI";
-import { Modal } from "@/app/components/modals/Modal";
 import { FieldLabel } from "@/app/components/ui/form-field";
 import { SettingsTextInput } from "@/app/components/settings/SettingsTextInput";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -53,13 +53,10 @@ export default function SettingsPage() {
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const [emailWarning, setEmailWarning] = useState<EmailWarning | null>(null);
   const [emailMfaOpen, setEmailMfaOpen] = useState(false);
-  const [googleEmailModalOpen, setGoogleEmailModalOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [accountDeleteMfaOpen, setAccountDeleteMfaOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const requiresPasswordForEmailChange =
-    user?.createdWithGoogle === true && profile?.passwordSet !== true;
 
   // Each field syncs from the profile independently. A combined effect
   // (both setters, keyed on both values) wiped in-progress text from the
@@ -79,9 +76,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (user?.email) {
-      setEmail(user.pendingEmail || user.email);
+      setEmail(user.email);
     }
-  }, [user?.email, user?.pendingEmail]);
+  }, [user?.email]);
 
   useEffect(() => {
     if (
@@ -91,11 +88,7 @@ export default function SettingsPage() {
     ) {
       return;
     }
-    setEmailStatus(
-      user.pendingEmail
-        ? "One confirmation was accepted. Confirm the email change from both your current and new addresses to finish."
-        : "Email updated.",
-    );
+    setEmailStatus("Email updated.");
     window.history.replaceState({}, "", "/settings");
   }, [user]);
 
@@ -139,10 +132,6 @@ export default function SettingsPage() {
   };
 
   const handleSaveEmail = async () => {
-    if (requiresPasswordForEmailChange) {
-      setGoogleEmailModalOpen(true);
-      return;
-    }
     const nextEmail = email.trim();
     if (!nextEmail || nextEmail === user?.email) return;
 
@@ -157,14 +146,9 @@ export default function SettingsPage() {
       }
 
       const updatedUser = await updateEmail(nextEmail);
-      const pendingEmail = updatedUser.pendingEmail;
-      setEmail(pendingEmail || updatedUser.email);
+      setEmail(updatedUser.email);
       setEmailSaved(true);
-      setEmailStatus(
-        pendingEmail
-          ? `Confirmation sent to your current address and ${pendingEmail}. Confirm both messages to finish the change. Your current email remains ${updatedUser.email} until then.`
-          : "Email updated.",
-      );
+      setEmailStatus("Email updated.");
       setTimeout(() => setEmailSaved(false), 2000);
     } catch (error: unknown) {
       devLog("[account/mfa] save email failed", { error });
@@ -174,7 +158,7 @@ export default function SettingsPage() {
           : "Failed to update email. Please try again.";
 
       if (isAlreadyRegisteredEmailError(message)) {
-        setEmail(user?.pendingEmail || user?.email || "");
+        setEmail(user?.email || "");
         setEmailWarning({
           title: "Email already registered",
           message: "An account with this email already exists.",
@@ -183,7 +167,7 @@ export default function SettingsPage() {
       }
 
       if (isEmailRateLimitError(message)) {
-        setEmail(user?.pendingEmail || user?.email || "");
+        setEmail(user?.email || "");
         setEmailWarning({
           title: "Email change unavailable",
           message:
@@ -313,7 +297,6 @@ export default function SettingsPage() {
                 aria-label="Email address"
                 type="email"
                 value={email}
-                disabled={requiresPasswordForEmailChange}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setEmailStatus(null);
@@ -324,10 +307,6 @@ export default function SettingsPage() {
               />
               {emailStatus ? (
                 <p className="text-xs text-gray-500">{emailStatus}</p>
-              ) : user.pendingEmail ? (
-                <p className="text-xs text-gray-500">
-                  Pending confirmation: {user.pendingEmail}
-                </p>
               ) : null}
               {emailStatus && (
                 <p className="text-xs text-gray-400">
@@ -340,17 +319,11 @@ export default function SettingsPage() {
                   onClick={handleSaveEmail}
                   disabled={
                     isSavingEmail ||
-                    (!requiresPasswordForEmailChange &&
-                      (!email.trim() ||
-                        email.trim() === user.email ||
-                        email.trim() === user.pendingEmail ||
-                        emailSaved))
+                    !email.trim() || email.trim() === user.email || emailSaved
                   }
                   className="text-xs font-medium text-gray-700 transition-colors hover:text-gray-950 disabled:cursor-not-allowed disabled:text-gray-400"
                 >
-                  {requiresPasswordForEmailChange
-                    ? "Update"
-                    : isSavingEmail
+                  {isSavingEmail
                       ? "Saving..."
                       : emailSaved
                         ? "Saved"
@@ -426,25 +399,6 @@ export default function SettingsPage() {
         message={emailWarning?.message}
         onClose={() => setEmailWarning(null)}
       />
-      <Modal
-        open={googleEmailModalOpen}
-        onClose={() => setGoogleEmailModalOpen(false)}
-        breadcrumbs={["Account", "Change email"]}
-        size="sm"
-        className="h-auto"
-        primaryAction={{
-          label: "Go to Security",
-          onClick: () => {
-            setGoogleEmailModalOpen(false);
-            router.push("/settings/security");
-          },
-        }}
-      >
-        <p className="pb-5 text-sm leading-relaxed text-gray-600">
-          Your account was created with Google. To change your email, first add
-          a password in Settings &gt; Security &gt; Password.
-        </p>
-      </Modal>
       <MfaVerificationPopup
         open={accountDeleteMfaOpen}
         onCancel={() => setAccountDeleteMfaOpen(false)}

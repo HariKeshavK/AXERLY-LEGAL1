@@ -1,3 +1,4 @@
+<!-- AXERLY modified 2026-09-24. -->
 # Manual and production deployment
 
 Use this path when connecting Mike to managed Supabase and S3-compatible
@@ -108,27 +109,13 @@ its `/api` prefix (for example, `https://app.example.com/api`). OAuth providers,
 including MCP connectors, must return through that public gateway; never use an
 internal container hostname such as `http://backend:3001` for callbacks.
 
-Never expose Supabase session tokens, the service-role key, model-provider
-keys, or storage secrets in frontend JavaScript.
+Never expose session tokens, model-provider keys, or storage secrets in
+frontend JavaScript.
 
-Production web auth cookies are `Secure`, `HttpOnly`, `SameSite=Lax`, path `/`,
-and use the `__Host-` prefix. Word task-pane cookies additionally use
-`SameSite=None` and `Partitioned` so an HTTPS pane embedded in Word on the web
-can authenticate without exposing tokens to JavaScript. The add-in serves and
-proxies `/api` from one origin; the backend still validates the original
-`Origin` header. Terminate TLS at both public origins, and set `FRONTEND_URL`
-plus `WORD_ADDIN_URL` to their exact values.
-
-When `WORD_ADDIN_URL` is configured, also set a dedicated, high-entropy
-`AUTH_HANDOFF_ENCRYPTION_SECRET`. Google OAuth transfers from its Office dialog
-to the task pane using a request-bound, encrypted, single-use database ticket
-that expires after two minutes. Apply
-`20260825_01_auth_handoff_tickets.sql` before enabling this flow.
-
-The first deployment intentionally signs out sessions created by older builds:
-the web app deletes legacy Supabase local/session-storage entries and the Word
-add-in deletes legacy OfficeRuntime access/refresh tokens. Users authenticate
-once to establish the new cookie; tokens are not copied through JavaScript.
+Authentication cookies are `Secure`, `SameSite=Lax`, path `/`, and use the
+`__Host-` prefix. The opaque session cookie is also `HttpOnly`; the separate
+CSRF cookie is readable only so the client can echo it in `X-CSRF-Token`.
+Terminate TLS at every app origin and configure the exact trusted origins.
 
 ### Object-storage CORS for direct uploads
 
@@ -223,188 +210,14 @@ server receive it from compose). To report to your own Sentry instead, set
 `SENTRY_DSN` (backend) and `FRONTEND_SENTRY_DSN` (web app). What is reported,
 what is scrubbed, and how to verify are in [observability.md](observability.md).
 
-## Authentication email
+## Authentication
 
-Supabase Auth sends signup, email-change, and password-recovery messages.
-Configure production SMTP in the Supabase dashboard; Mike does not require a
-Resend API key for these messages.
-
-In **Authentication > URL Configuration**, set the Site URL to the deployed
-frontend origin and add that origin's `/auth/callback` URL to the redirect
-allow list. For example:
-
-```text
-https://your-mike.example/auth/callback
-```
-
-Enable email confirmation for production signups. Keep secure email change
-enabled so Supabase requires confirmation from both the current and proposed
-addresses. Set the minimum password length to 10; this applies when passwords
-are created or changed and does not invalidate existing shorter passwords. The
-same callback handles signup confirmation, confirmed email
-changes, and password-recovery links before sending the user to the appropriate
-Mike page.
-
-Review the Supabase email templates after changing the public Site URL, and
-test every link against the deployed frontend before inviting users. Existing
-deployments must also apply the latest migration so confirmed email changes are
-mirrored into `user_profiles`.
-
-## Google authentication
-
-Create a **Web application** OAuth client in Google Auth Platform. Its
-authorized redirect URI is the Supabase Auth callback shown on the Google
-provider page, not Mike's frontend callback. For hosted Supabase it normally
-has this form:
-
-```text
-https://<project-ref>.supabase.co/auth/v1/callback
-```
-
-Enable Google under **Supabase > Authentication > Providers**, then enter the
-Google client ID and secret. In **Authentication > URL Configuration**, allow
-both deployed Mike clients:
-
-```text
-https://your-mike.example/auth/callback
-https://your-word-addin.example/oauth-dialog.html
-```
-
-The Word add-in completes authentication in an Office Dialog. The dialog gives
-the task pane only an opaque, short-lived, single-use handoff ticket. The task
-pane redeems it through the same-origin add-in proxy, and the backend writes its
-HttpOnly cookie. No Supabase access or refresh token enters add-in JavaScript or
-OfficeRuntime storage. The add-in also does not retain Google's provider access
-token or request Google Drive or Gmail access.
-
-## Enterprise SSO (SAML)
-
-Self-hosted Mike can use SAML providers registered in Supabase Auth (GoTrue),
-including Okta, Microsoft Entra ID, and Google Workspace SAML. The login page
-offers an SSO entry point; the backend permits the flow only when SSO is
-enabled. The existing email/password and Google methods remain available; this
-feature does not enforce SSO-only access.
-
-### Configure GoTrue
-
-For the Compose GoTrue service, uncomment the SAML environment entries in
-`docker-compose.yml`. Set `GOTRUE_SAML_ENABLED=true`, provide
-`GOTRUE_SAML_PRIVATE_KEY`, and set `GOTRUE_SAML_EXTERNAL_URL` to the public Auth
-base URL, for example `https://auth.example.com/auth/v1`. The `/auth/v1` suffix
-is required behind the Compose gateway: GoTrue appends `/sso/saml/acs` and
-`/sso/saml/metadata` to this base. Keep `SUPABASE_PUBLIC_URL` as the gateway
-origin. Configure these values in the root Compose `.env` or shell environment;
-`backend/.env` is loaded by the backend service, not the Auth service.
-
-The pinned GoTrue version expects a standard base64-encoded **PKCS#1 DER RSA
-private key** (at least 2048 bits), not PEM or PKCS#8. With OpenSSL 3:
-
-```bash
-umask 077
-openssl genrsa -traditional -out saml-private.pem 2048
-openssl rsa -in saml-private.pem -traditional -outform DER -out saml-private.der
-openssl base64 -A -in saml-private.der -out saml-private.base64
-```
-
-Put the base64 file's contents in `GOTRUE_SAML_PRIVATE_KEY` using your deployment
-secret store. Keep the key stable across restarts and replicas; rotating it
-requires updating the IdP's trust configuration. Keep all key files outside the
-repository. Restart the Auth service after configuring SAML.
-
-In GoTrue, set `GOTRUE_SITE_URL` to the deployed frontend origin and restrict
-`GOTRUE_URI_ALLOW_LIST` to the frontend's `/auth/callback` URL (plus existing
-required callbacks). Replace the permissive local Compose allowlist for a
-public deployment. For hosted Supabase, use its SAML provider setup and URL
-configuration instead of configuring GoTrue container variables.
-
-### Register an identity provider
-
-Import the service provider metadata from:
-
-```text
-https://auth.example.com/auth/v1/sso/saml/metadata
-```
-
-Use its entity ID/audience and assertion consumer service (ACS) URL in your
-IdP. The ACS is `https://auth.example.com/auth/v1/sso/saml/acs`, not Mike's
-frontend callback. Configure the IdP to supply an email attribute and assign
-the intended users or groups to the application.
-
-For example, create a SAML 2.0 application in Okta, set its Single sign-on URL
-to the ACS and Audience URI to the metadata entity ID, and add an `email`
-attribute containing the user's email. Obtain the IdP metadata URL. Entra ID
-enterprise applications and Google Workspace custom SAML applications use the
-same service provider metadata; export their IdP metadata XML if they do not
-provide a publicly fetchable HTTPS metadata URL.
-
-Register the provider through GoTrue's admin API from a trusted administrative
-machine. Replace these placeholders; the bearer token must be an administrative
-`service_role` JWT, never a browser credential:
-
-```bash
-curl --fail-with-body --request POST \
-  'https://auth.example.com/auth/v1/admin/sso/providers' \
-  --header 'Authorization: Bearer <SERVICE_ROLE_JWT>' \
-  --header 'apikey: <SERVICE_ROLE_JWT>' \
-  --header 'Content-Type: application/json' \
-  --data '{
-    "type": "saml",
-    "metadata_url": "https://idp.example.com/app/metadata",
-    "domains": ["example.com"],
-    "attribute_mapping": {"keys": {"email": {"name": "email"}}}
-  }'
-```
-
-Use `metadata_xml` instead of `metadata_url` when importing XML. Match the
-attribute mapping to the IdP's actual attribute name. The `domains` field maps
-an exact domain to this provider; add all domains your users will enter. List
-providers with `GET /auth/v1/admin/sso/providers`; use
-`PUT /auth/v1/admin/sso/providers/<provider-id>` to update an existing provider
-instead of repeating creation. Keep admin access restricted.
-
-### Enable Mike and verify sign-in
-
-Set these in `backend/.env` (or the backend service environment), then restart
-the backend. No frontend rebuild is needed:
-
-```dotenv
-SSO_ENABLED=true
-SSO_ALLOWED_DOMAINS=example.com
-```
-
-`SSO_ENABLED` defaults to false and enables only with `true` (case-insensitive).
-The SSO screen asks for a company email and uses its normalized domain to find
-the matching provider; the email itself is not sent to GoTrue during provider
-discovery. `SSO_ALLOWED_DOMAINS` is an optional comma-separated list of exact
-domains. Use DNS names, or punycode for international domains, without URLs or
-wildcards. Invalid domain settings fail closed. Omitting the allowlist permits
-any domain registered in GoTrue.
-The allowlist controls Mike's sign-in initiation, not account authorization or
-direct access to GoTrue; enforce membership and access policy at the IdP and
-Auth service.
-
-Mike calls GoTrue's `/sso` API using the server-side Supabase SDK, which sends
-`skip_http_redirect: true` and a PKCE challenge. After IdP authentication,
-GoTrue redirects to Mike's existing `/auth/callback`; the backend exchanges
-the code using its HttpOnly verifier cookie and establishes the normal session.
-Start sign-in from Mike in the same browser; IdP-initiated flows are outside
-this integration. The Word add-in's existing authentication remains unchanged.
-
-Before inviting users, verify the metadata contains the public ACS URL, try
-both an assigned and an unassigned IdP user, confirm return to onboarding or
-the app, and confirm logout and an unapproved domain behave as expected. SAML
-identities can be separate accounts from existing email/Google identities; do
-not assume matching emails link accounts or transfer project access.
-
-Cloudflare Access or IAP in front of Mike is complementary perimeter access
-control. It does not establish Mike's Supabase session and is not a substitute
-for this SAML integration. Ensure the IdP/browser can reach the required SAML
-endpoints through any perimeter controls.
-
-References: [Supabase signInWithSSO](https://supabase.com/docs/reference/javascript/auth-signinwithsso),
-[GoTrue SSO API](https://github.com/supabase/auth/blob/v2.189.0/internal/api/sso.go),
-[SAML configuration](https://github.com/supabase/auth/blob/v2.189.0/internal/conf/saml.go),
-and [provider administration](https://github.com/supabase/auth/blob/v2.189.0/internal/api/ssoadmin.go).
+AXERLY uses local email/password authentication. Passwords require at least 12
+characters and are hashed with scrypt. The backend stores only hashed opaque
+session tokens, enforces idle and absolute expiry, and applies account/IP login
+limits. There is no public registration endpoint; organization onboarding will
+provide the gated account-creation flow. Development builds expose the
+first-user-only `/auth/dev/bootstrap` endpoint.
 
 ## Install and run
 

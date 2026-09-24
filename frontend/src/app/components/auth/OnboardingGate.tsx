@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-24.
 
 import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -12,19 +13,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const { profile, loading } = useUserProfile();
     const isOnboardingRoute = pathname.startsWith("/onboarding");
-    // Credential-recovery pages must stay reachable even when onboarding is
-    // incomplete: a recovery link logs the user in, and bouncing them to
-    // onboarding here would discard the recovery session before they can set
-    // a password (they'd stay locked out of their account forever).
-    const isAuthTransitionRoute =
-        pathname === "/login" ||
-        pathname === "/login/sso" ||
-        pathname === "/signup" ||
-        pathname === "/signup/check-email" ||
-        pathname === "/auth/callback" ||
-        pathname === "/forgot-password" ||
-        pathname === "/reset-password" ||
-        pathname === "/verify-mfa";
+    const isAuthTransitionRoute = pathname === "/login";
     const needsOnboarding = profile?.onboardingComplete === false;
 
     useEffect(() => {

@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import { streamAiSdk } from "../../lib/llm/aiSdk";
@@ -347,7 +347,7 @@ vi.mock("../../lib/memory/schedule", () => ({
     scheduleMemoryConsolidation(...args),
 }));
 
-// Authenticate every request as user "u1" without exercising the real Supabase
+// Authenticate every request as user "u1" without exercising the real local
 // JWT path. requireMfaIfEnrolled must be exported too — userRouter (mounted by
 // the app) imports it at module load.
 vi.mock("../../middleware/auth", () => ({

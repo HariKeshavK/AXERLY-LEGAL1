@@ -1,3 +1,4 @@
+<!-- AXERLY modified 2026-09-24. -->
 # Word add-in development and deployment
 
 This guide contains the detailed setup, deployment, testing, and troubleshooting
@@ -7,20 +8,16 @@ reference for the [Mike Word add-in](../word-addin/README.md).
 
 The add-in uses the same backend-managed session and Mike API as the web app:
 
-- Password, Google, refresh, and logout operations go through the Mike backend.
+- Password login, session checks, and logout go through the AXERLY backend.
 - Chat, workflows, uploads, profiles, and model discovery use the Mike API.
 - Word conversations use dedicated `word_*` tables and do not appear in the
   web assistant's normal chat history.
 - The task pane requires HTTPS, so local development proxies `/api` to Mike
   through `https://localhost:3200`.
 
-Password and Google sign-in both produce the same HttpOnly cookie session.
-Google sign-in uses a non-iframe Office Dialog that starts and finishes at
-`https://localhost:3200/oauth-dialog.html`; the intermediate Supabase and
-Google pages run outside the task pane. No access or refresh token is available
-to task-pane JavaScript or OfficeRuntime storage. The dialog returns only a
-request-bound, single-use handoff ticket; the task pane redeems it and receives
-its own HttpOnly cookie.
+Password sign-in produces the same server-managed cookie session used by the
+desktop app. No access or refresh token is available to task-pane JavaScript or
+OfficeRuntime storage.
 
 The add-in requires `WordApi 1.6` for tracked-change inspection, acceptance,
 and rejection.
@@ -154,18 +151,9 @@ The Dockerfile packages the same host. It expects TLS to terminate at the
 deployment ingress and requires `WORD_ADDIN_BACKEND_ORIGIN` only at runtime.
 
 Identify and allow the deployed task-pane origin in the backend with
-`WORD_ADDIN_URL=https://word.example.com`. `ALLOWED_ORIGINS` alone is not
-sufficient: the explicit Word setting also selects the partitioned cookie
-policy and enables the OAuth handoff. Without it, the backend rejects the
-handoff and Word on the web cannot retain its embedded session.
-Set `AUTH_HANDOFF_ENCRYPTION_SECRET` and apply
-`backend/migrations/20260825_01_auth_handoff_tickets.sql` before enabling Google
-sign-in. The backend rejects missing or weak handoff configuration at startup.
-
-For Google sign-in, add
-`https://word.example.com/oauth-dialog.html` to the Supabase Auth redirect
-allow list. Google's own authorized redirect URI remains the Supabase callback,
-for example `https://<project-ref>.supabase.co/auth/v1/callback`.
+`WORD_ADDIN_URL=https://word.example.com`. The backend validates this exact
+origin for state-changing requests. Serve the add-in and its `/api` proxy over
+HTTPS so Secure authentication cookies work.
 
 ## Chat and storage behavior
 

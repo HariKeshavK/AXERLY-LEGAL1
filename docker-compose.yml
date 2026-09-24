@@ -1,3 +1,4 @@
+# AXERLY modified 2026-09-24.
 # MikeOSS — full local stack, one `docker compose up`. No external accounts.
 # Supabase is embedded (db + auth + rest + gateway); storage is RustFS.
 # The only thing you must supply is one model API key in backend/.env.
@@ -132,7 +133,6 @@ services:
     volumes:
       - ./backend/schema.sql:/schema.sql:ro
       - ./backend/migrations/20260823_01_unified_workflow_catalog.sql:/workflow-catalog-migration.sql:ro
-      - ./backend/migrations/20260825_01_auth_handoff_tickets.sql:/auth-handoff-migration.sql:ro
       - ./backend/migrations/20260826_01_task_model_selection.sql:/model-selection-migration.sql:ro
       - ./backend/migrations/20260826_02_rename_last_selected_chat_model.sql:/last-selected-model-migration.sql:ro
       - ./backend/migrations/20260826_03_chat_reasoning_selection.sql:/reasoning-selection-migration.sql:ro
@@ -169,7 +169,6 @@ services:
         # Existing Compose volumes skipped schema.sql above, so replay all
         # idempotent forward migrations before application jobs start.
         psql "$$DB" -v ON_ERROR_STOP=1 -f /workflow-catalog-migration.sql;
-        psql "$$DB" -v ON_ERROR_STOP=1 -f /auth-handoff-migration.sql;
         psql "$$DB" -v ON_ERROR_STOP=1 -f /model-selection-migration.sql;
         psql "$$DB" -v ON_ERROR_STOP=1 -f /last-selected-model-migration.sql;
         psql "$$DB" -v ON_ERROR_STOP=1 -f /reasoning-selection-migration.sql;

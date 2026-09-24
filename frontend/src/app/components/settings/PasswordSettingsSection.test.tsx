@@ -1,3 +1,4 @@
+// AXERLY modified 2026-09-24.
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,52 +8,29 @@ const state = vi.hoisted(() => ({
     user: {
         id: "user-1",
         email: "alex@example.com",
-        pendingEmail: null,
-        createdWithGoogle: true,
+        role: "member" as const,
+        status: "active" as const,
     },
-    passwordSet: false,
     setPassword: vi.fn(),
-    syncPasswordSet: vi.fn(),
-    requestPasswordReset: vi.fn(),
 }));
 
 vi.mock("@/app/contexts/AuthContext", () => ({
     useAuth: () => ({ user: state.user, setPassword: state.setPassword }),
 }));
 
-vi.mock("@/app/contexts/UserProfileContext", () => ({
-    useUserProfile: () => ({
-        profile: { passwordSet: state.passwordSet },
-        syncPasswordSet: state.syncPasswordSet,
-    }),
-}));
-
-vi.mock("@/app/lib/authApi", () => ({
-    requestPasswordReset: state.requestPasswordReset,
-}));
-
 describe("PasswordSettingsSection", () => {
     beforeEach(() => {
-        state.user.createdWithGoogle = true;
-        state.passwordSet = false;
         state.setPassword.mockReset();
         state.setPassword.mockResolvedValue(undefined);
-        state.syncPasswordSet.mockReset();
-        state.syncPasswordSet.mockImplementation(async () => {
-            state.passwordSet = true;
-            return true;
-        });
-        state.requestPasswordReset.mockReset();
-        state.requestPasswordReset.mockResolvedValue(undefined);
     });
 
-    it("lets a Google-created account add its first password", async () => {
+    it("changes the password and reports session revocation", async () => {
         const user = userEvent.setup();
         render(<PasswordSettingsSection />);
 
-        expect(screen.getByText("Set password", { selector: "p" })).toBeVisible();
+        expect(screen.getByText("Change password", { selector: "p" })).toBeVisible();
         await user.click(
-            screen.getByRole("button", { name: "Set password" }),
+            screen.getByRole("button", { name: "Change password" }),
         );
 
         const dialog = screen.getByRole("dialog", { name: "Set password" });
@@ -61,36 +39,19 @@ describe("PasswordSettingsSection", () => {
         );
         await user.type(
             within(dialog).getByLabelText("Password"),
-            "securepass1",
+            "securepass12",
         );
         await user.type(
             within(dialog).getByLabelText("Confirm password"),
-            "securepass1",
+            "securepass12",
         );
         await user.click(
             within(dialog).getByRole("button", { name: "Set password" }),
         );
 
         await waitFor(() =>
-            expect(state.setPassword).toHaveBeenCalledWith("securepass1"),
+            expect(state.setPassword).toHaveBeenCalledWith("securepass12"),
         );
-        expect(screen.getByText("Password added to your account.")).toBeVisible();
-    });
-
-    it("keeps the reset-email flow for accounts that already have a password", async () => {
-        state.passwordSet = true;
-        const user = userEvent.setup();
-        render(<PasswordSettingsSection />);
-
-        expect(screen.getByText("Reset password")).toBeVisible();
-        await user.click(
-            screen.getByRole("button", { name: "Send reset email" }),
-        );
-
-        await waitFor(() =>
-            expect(state.requestPasswordReset).toHaveBeenCalledWith(
-                "alex@example.com",
-            ),
-        );
+        expect(screen.getByText("Password changed. Sign in again with the new password.")).toBeVisible();
     });
 });

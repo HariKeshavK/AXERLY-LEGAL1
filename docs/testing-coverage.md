@@ -1,3 +1,4 @@
+<!-- AXERLY modified 2026-09-24. -->
 # Backend unit-test coverage
 
 The backend has a Vitest unit-test harness whose coverage ratchet measures all
@@ -115,7 +116,7 @@ Size is a rough guess: S ≈ an hour, M ≈ an afternoon.
       pure chunk-parsing helpers first. (M)
 
 Not worth unit testing directly: `lib/supabase.ts` and `lib/convert.ts` are
-thin wrappers around external services (Supabase auth, LibreOffice); they are
+thin wrappers around external services (LibreOffice); they are
 better exercised by the e2e suite.
 
 ## Ratchet policy

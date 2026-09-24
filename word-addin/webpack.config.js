@@ -1,3 +1,4 @@
+/* AXERLY modified 2026-09-24. */
 /* eslint-disable @typescript-eslint/no-var-requires */
 const path = require("path");
 const fs = require("fs");
@@ -158,7 +159,6 @@ module.exports = async (_env, options) => {
     entry: {
       taskpane: "./src/taskpane/index.tsx",
       commands: "./src/commands/commands.ts",
-      oauthDialog: "./src/oauth-dialog/index.ts",
     },
     output: {
       path: path.resolve(__dirname, "dist"),
@@ -203,9 +203,7 @@ module.exports = async (_env, options) => {
         "@mike/citation-pill-ui": frontendSharedUi("CitationPillUI.tsx"),
         "@mike/model-toggle-ui": frontendSharedUi("ModelToggleUI.tsx"),
         "@mike/mike-icon-ui": frontendSharedUi("MikeIconUI.tsx"),
-        "@mike/google-icon-ui": frontendSharedUi("GoogleIconUI.tsx"),
         "@mike/auth-styles-ui": frontendSharedUi("AuthStylesUI.ts"),
-        "@mike/auth-divider-ui": frontendSharedUi("AuthDividerUI.tsx"),
         "@mike/workflow-slash-command-ui": frontendSharedUi(
           "WorkflowSlashCommandUI.tsx",
         ),
@@ -255,11 +253,6 @@ module.exports = async (_env, options) => {
         filename: "commands.html",
         template: "./src/commands/commands.html",
         chunks: ["commands"],
-      }),
-      new HtmlWebpackPlugin({
-        filename: "oauth-dialog.html",
-        template: "./src/oauth-dialog/index.html",
-        chunks: ["oauthDialog"],
       }),
       // Expose env vars to the bundle so TypeScript process.env calls compile
       new webpack.EnvironmentPlugin({

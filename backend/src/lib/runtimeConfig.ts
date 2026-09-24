@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-23.
+// AXERLY modified 2026-09-24.
 function required(env: NodeJS.ProcessEnv, names: readonly string[]): string {
   for (const name of names) {
     const value = env[name]?.trim();
@@ -121,21 +121,6 @@ export function configuredApiPublicUrl(
   return required(env, ["API_PUBLIC_URL"]).replace(/\/+$/, "");
 }
 
-export function authHandoffEncryptionSecret(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const secret =
-    env.AUTH_HANDOFF_ENCRYPTION_SECRET?.trim() ||
-    env.AXERLY_SESSION_SECRET?.trim() ||
-    "";
-  if (secret.length < 32) {
-    throw new Error(
-      "AUTH_HANDOFF_ENCRYPTION_SECRET must contain at least 32 characters",
-    );
-  }
-  return secret;
-}
-
 /**
  * Fail before the HTTP listener starts when the authentication boundary is not
  * usable. This deliberately lives outside app.ts so unit tests can import the
@@ -148,18 +133,6 @@ export function validateRuntimeConfiguration(
   if (!env.DATABASE_URL?.trim()) errors.push("DATABASE_URL is required");
   if (!env.AXERLY_SESSION_SECRET?.trim()) {
     errors.push("AXERLY_SESSION_SECRET is required");
-  }
-
-  if (env.AUTH_HANDOFF_ENCRYPTION_SECRET?.trim()) {
-    if (env.AUTH_HANDOFF_ENCRYPTION_SECRET.trim().length < 32) {
-      errors.push(
-        "AUTH_HANDOFF_ENCRYPTION_SECRET must contain at least 32 characters",
-      );
-    }
-  } else if (env.WORD_ADDIN_URL?.trim()) {
-    errors.push(
-      "AUTH_HANDOFF_ENCRYPTION_SECRET is required when WORD_ADDIN_URL is set",
-    );
   }
 
   if (env.NODE_ENV === "production") {
