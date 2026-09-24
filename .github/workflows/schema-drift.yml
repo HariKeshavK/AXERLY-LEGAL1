@@ -1,0 +1,33 @@
+# AXERLY modified 2026-09-24.
+name: Direct PostgreSQL schema
+
+on:
+  pull_request:
+    paths: ["backend/schema.sql", "backend/db/migrations/**", "backend/src/db/**"]
+  push:
+    branches: [main]
+    paths: ["backend/schema.sql", "backend/db/migrations/**", "backend/src/db/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --allow-remote=all
+      - name: Apply schema twice and verify extensions
+        shell: pwsh
+        run: |
+          $env:AXERLY_DATA_DIR = Join-Path $env:RUNNER_TEMP "axerly-schema-drift"
+          npm run verify:db

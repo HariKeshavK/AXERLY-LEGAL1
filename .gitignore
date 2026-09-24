@@ -2,20 +2,30 @@
 node_modules/
 
 # Build output
+.next/
 dist/
 release/
 out/
+build/
+.open-next/
 
 # Environment and local configuration
 .env
 .env.*
 !.env.example
+!.env.local.example
 
 # Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.raw-llm-stream.json
+
+# Compiler and hosting output
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
 
 # Editors and operating systems
 .idea/
@@ -23,5 +33,22 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Test coverage
+# Test artifacts
 coverage/
+test-results/
+playwright-report/
+e2e/.auth/
+
+# Local Supabase scaffold. Keep the shared project configuration reproducible,
+# while excluding CLI state and other generated local files.
+/supabase/
+backend/supabase/*
+!backend/supabase/config.toml
+
+# Development scratch files
+.current-issue.md
+.implementation-plan.md
+.implement-config
+
+# Local review artifact; it is a nested repository, not application source.
+/pr-267-analysis-site/

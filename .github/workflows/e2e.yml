@@ -1,0 +1,43 @@
+# AXERLY modified 2026-09-24.
+# Temporary local-stack gate while encrypted host-disk storage replaces S3.
+name: Application integration gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Install backend
+        working-directory: backend
+        run: npm ci --allow-remote=all
+      - name: Backend checks
+        working-directory: backend
+        run: npm run build && npm run typecheck:test
+      - name: Embedded database integration
+        working-directory: backend
+        shell: pwsh
+        run: |
+          $env:AXERLY_DATA_DIR = Join-Path $env:RUNNER_TEMP "axerly-integration"
+          npm run verify:db
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend checks
+        working-directory: frontend
+        run: npm run typecheck && npm run lint
