@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 // Public-key verification only. License signing belongs exclusively to the
 // separately deployed private licensing function.
 import { createPublicKey, verify } from "node:crypto";
@@ -51,7 +51,10 @@ export function verifyLicenseToken(
       publicJwk?.kty !== "EC" || publicJwk.crv !== "P-256" ||
       !publicJwk.x || !publicJwk.y || !installId) return null;
   const parts = token.split(".");
-  if (parts.length !== 3 || !parts.every((part) => part && PART.test(part))) return null;
+  // Node's base64url decoder accepts alternate last characters whose unused
+  // bits differ. Compact JWS must use one canonical encoding for each part.
+  if (parts.length !== 3 || !parts.every((part) => part && PART.test(part) &&
+    Buffer.from(part, "base64url").toString("base64url") === part)) return null;
   const [encodedHeader, encodedPayload, encodedSignature] = parts;
   const header = jsonPart(encodedHeader);
   const payload = jsonPart(encodedPayload);

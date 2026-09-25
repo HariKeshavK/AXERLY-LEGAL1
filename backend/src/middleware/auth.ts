@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 import type { NextFunction, Request, Response } from "express";
 import { createRequestAuthSession } from "../lib/authSession";
 import { can } from "../lib/authz";
@@ -14,6 +14,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const user = result.data.user;
     if (!user || !can(user, "session:use", { kind: "system" })) {
       res.status(401).json({ detail: "Invalid or expired session" });
+      return;
+    }
+    if (user.must_change_password && !["/auth/me", "/auth/session", "/auth/password", "/auth/logout"].includes(req.originalUrl.split("?")[0])) {
+      res.status(403).json({ code: "password_change_required", detail: "Change your temporary password before continuing." });
       return;
     }
     if (!SAFE_METHODS.has(req.method)) {
@@ -32,6 +36,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.locals.userId = user.id;
     res.locals.userEmail = user.email;
     res.locals.userRole = user.role;
+    res.locals.mustChangePassword = user.must_change_password === true;
     setCurrentUser(user.id);
     next();
   } catch (error) {

@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 import type { Request, Response } from "express";
 import { createRequestDatabase, type Db } from "./database";
 import type { AuthUser } from "./localAuth";
@@ -43,5 +43,6 @@ export function createRequestAuthSession(req: Request, res: Response): Db {
   });
 }
 
-export interface PublicAuthUser { id: string; email: string; role: "admin" | "member"; status: "active" | "disabled"; }
-export function publicAuthUser(user: AuthUser): PublicAuthUser { return { id: user.id, email: user.email, role: user.role, status: user.status }; }
+export interface PublicAuthUser { id: string; email: string; role: "admin" | "member"; status: "active" | "disabled"; must_change_password?: boolean; }
+export function publicAuthUser(user: AuthUser): PublicAuthUser { return { id: user.id, email: user.email, role: user.role, status: user.status,
+  ...(user.must_change_password ? { must_change_password: true } : {}) }; }

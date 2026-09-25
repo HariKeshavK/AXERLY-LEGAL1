@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 import "dotenv/config";
 import { createHash, randomUUID } from "node:crypto";
 import express from "express";
@@ -38,6 +38,10 @@ import { configuredAllowedOrigins } from "./lib/origins";
 import { envInt } from "./lib/runtimeConfig";
 import { tagCurrentRequest } from "./lib/observability/sentry";
 import { authenticationBoundary } from "./middleware/routeSecurity";
+import { licenseWriteGate } from "./middleware/licenseGate";
+import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
+import { adminRouter } from "./modules/admin/admin.routes";
+import { licenseRouter } from "./licensing/license.routes";
 
 export const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -217,6 +221,7 @@ app.use(generalLimiter);
 // AXERLY modified 2026-09-24: all routes below are authenticated unless they
 // are named in the explicit public allowlist.
 app.use(authenticationBoundary);
+app.use(licenseWriteGate);
 
 app.post("/auth/login", authLoginIpLimiter);
 
@@ -271,6 +276,9 @@ app.delete("/user/projects", dataDeleteLimiter);
 app.delete("/user/tabular-reviews", dataDeleteLimiter);
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(onboardingRouter);
+app.use("/admin", adminRouter);
+app.use("/licensing", licenseRouter);
 
 // Body-aware account throttling complements the per-IP login limiter. The key
 // is a one-way digest, so email addresses never enter the limiter store.

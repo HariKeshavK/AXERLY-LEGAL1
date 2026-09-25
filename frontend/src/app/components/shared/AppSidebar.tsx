@@ -1,4 +1,5 @@
 "use client";
+// AXERLY modified 2026-09-25.
 
 import {
     useState,
@@ -661,10 +662,10 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                         <SettingsSkeuoIcon className="h-4 w-4" />
                                         Settings
                                     </button>
-                                    <button
+                                    {user?.role === "admin" && <button
                                         type="button"
                                         onClick={() => {
-                                            router.push("/organizations");
+                                            router.push("/admin");
                                             setIsDropdownOpen(false);
                                         }}
                                         className={cn(
@@ -673,8 +674,8 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                         )}
                                     >
                                         <OrganizationSkeuoIcon className="h-4 w-4" />
-                                        Organizations
-                                    </button>
+                                        Firm administration
+                                    </button>}
                                     <button
                                         type="button"
                                         onClick={() => {

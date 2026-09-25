@@ -12,7 +12,7 @@
 
 ## After P3 authentication and authorization
 
-- P6 must replace the development-only first-user bootstrap with licensed organization creation and invitation/join flows.
+- P6's licensed organization creation and join flows are implemented; finish the release gates listed below before shipping.
 - Replace the remaining historical `auth_handoff_tickets` definition in immutable baseline migration `0001` only through the applied `0002` drop; do not edit the baseline checksum.
 
 ## After P4 encrypted files
@@ -24,7 +24,7 @@
 
 ## After P5 single firm and teams
 
-- P6: replace the development-only initial-firm creation route with the licensed first-run setup flow; generate and hash the firm join code/password, and build the join/admin controls. The production route is deliberately absent until that gate exists.
+- P6: the licensed first-run setup, join credentials, and admin controls are implemented; complete the listed host identity, model, and audit release gates.
 - P7: use all memberships from `teamIdsForUser` to union model entitlements and add explicit team targets to the existing Library/Project sharing model. Team membership currently grants no document or project access by itself.
 - If an existing installation has multiple organizations, design an explicit, reviewed, access-preserving migration. Migration `0004` intentionally refuses to merge tenants automatically.
 - Remove or repurpose the now-unmounted legacy Create Organization modal and obsolete frontend create/delete-org API helpers as part of the P6 onboarding redesign.
@@ -32,5 +32,13 @@
 ## Licensing prerequisite before P6 production setup
 
 - Keep the nested `licensing-server/` checkout out of the public app repository **and** the future Electron packaging inputs; `.gitignore` alone does not exclude installer files.
-- After L-A deploys the ES256 license Edge Function and supplies its separate public JWK, wire the app's verifier into a backend-enforced activation/setup flow. Until then, production firm creation remains unavailable.
+- The deployed ES256 license Edge Function's separate public JWK is pinned in the app verifier and enforced at setup; perform a real issued-license smoke test before distribution.
 - Revisit license-signing key rotation before production: a single pinned public key cannot validate older tokens after immediate private-key replacement.
+
+## P6 follow-ups before release
+
+- P13 host/TLS bootstrap must supply actual LAN hostnames/IPs, port, and pinned public-key fingerprint to the setup invite details. P6 deliberately does not invent a network identity before a host exists.
+- P7 must enforce model entitlements in the single provider gate. A newly joined member gets no team, but the legacy model-call paths do not yet uniformly deny a teamless member.
+- Complete the firm-wide security audit feed for authentication failures, join attempts, shares, provider-key changes, file downloads, and blocked model calls. The P6 panel currently exposes existing `audit_events` plus role, reset, join-success, and ownership events, but not every requested category.
+- Perform a real activation/renewal smoke test with a separately issued test license key before production distribution; the app's public-key verifier and bundled-Postgres integration are tested locally, but no private license key was placed in this repository.
+- Add a safe public-verification-key rotation mechanism with overlap and recovery, so a signing-key change cannot strand installed clients.

@@ -1,5 +1,5 @@
-// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24.
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+// AXERLY modified 2026-09-23; AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +9,12 @@ export interface AxerlySecrets {
   sessionSecret: string;
   storageMasterKey: string;
   storageRecoveryKeyPending: boolean;
+  licenseInstallId?: string;
+  licenseMachineSalt?: string;
+  licenseToken?: string;
+  licenseActivatedAt?: string;
+  licenseLastValidatedAt?: string;
+  licenseBlockedCode?: string;
 }
 
 /**
@@ -41,7 +47,13 @@ function isSecrets(value: unknown): value is AxerlySecrets {
     record.sessionSecret.length >= 43 &&
     typeof record.storageMasterKey === "string" &&
     Buffer.from(record.storageMasterKey, "base64url").length === 32 &&
-    typeof record.storageRecoveryKeyPending === "boolean"
+    typeof record.storageRecoveryKeyPending === "boolean" &&
+    (record.licenseInstallId === undefined || (typeof record.licenseInstallId === "string" && /^[0-9a-f-]{36}$/i.test(record.licenseInstallId))) &&
+    (record.licenseMachineSalt === undefined || (typeof record.licenseMachineSalt === "string" && Buffer.from(record.licenseMachineSalt, "base64url").length === 32)) &&
+    (record.licenseToken === undefined || (typeof record.licenseToken === "string" && record.licenseToken.length <= 24_576)) &&
+    (record.licenseActivatedAt === undefined || (typeof record.licenseActivatedAt === "string" && Number.isFinite(Date.parse(record.licenseActivatedAt)))) &&
+    (record.licenseLastValidatedAt === undefined || (typeof record.licenseLastValidatedAt === "string" && Number.isFinite(Date.parse(record.licenseLastValidatedAt)))) &&
+    (record.licenseBlockedCode === undefined || (typeof record.licenseBlockedCode === "string" && record.licenseBlockedCode.length <= 64))
   );
 }
 
@@ -108,6 +120,8 @@ export function generateSecrets(): AxerlySecrets {
     sessionSecret: randomBytes(48).toString("base64url"),
     storageMasterKey: randomBytes(32).toString("base64url"),
     storageRecoveryKeyPending: true,
+    licenseInstallId: randomUUID(),
+    licenseMachineSalt: randomBytes(32).toString("base64url"),
   };
 }
 
@@ -209,7 +223,16 @@ export async function loadOrCreateSecrets(
   store: SecretsStore = new FileSecretsStore(),
 ): Promise<AxerlySecrets> {
   const existing = await store.load();
-  if (existing) return existing;
+  if (existing) {
+    if (existing.licenseInstallId && existing.licenseMachineSalt) return existing;
+    const upgraded = {
+      ...existing,
+      licenseInstallId: existing.licenseInstallId ?? randomUUID(),
+      licenseMachineSalt: existing.licenseMachineSalt ?? randomBytes(32).toString("base64url"),
+    };
+    await store.save(upgraded);
+    return upgraded;
+  }
   const generated = generateSecrets();
   await store.save(generated);
   return generated;

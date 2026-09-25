@@ -1,5 +1,5 @@
 "use client";
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ export default function LoginPage() {
     const router = useRouter();
     const {
         isAuthenticated,
+        user,
         authLoading,
         authError,
         refreshSession,
@@ -37,7 +38,7 @@ export default function LoginPage() {
     const [savedRecoveryKey, setSavedRecoveryKey] = useState(false);
 
     useEffect(() => {
-        if (authLoading || !isAuthenticated || loading || recoveryKey) return;
+        if (authLoading || !isAuthenticated || loading || recoveryKey || user?.must_change_password) return;
         let cancelled = false;
         void pendingStorageRecoveryKey().then((key) => {
             if (cancelled) return;
@@ -47,7 +48,7 @@ export default function LoginPage() {
             if (!cancelled) setError("Unable to load the storage recovery key. Please retry.");
         });
         return () => { cancelled = true; };
-    }, [authLoading, isAuthenticated, loading, recoveryKey, router]);
+    }, [authLoading, isAuthenticated, loading, recoveryKey, router, user?.must_change_password]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,7 +56,12 @@ export default function LoginPage() {
         setError(null);
 
         try {
-            await login(email, password);
+            const result = await login(email, password);
+            if (result.user.must_change_password) {
+                await refreshSession();
+                router.push("/change-password");
+                return;
+            }
             const key = await pendingStorageRecoveryKey();
             if (key) setRecoveryKey(key);
             await refreshSession();
@@ -166,6 +172,7 @@ export default function LoginPage() {
                             </PillButtonUI>
                         </div>
                     </form>
+                    <a className="mt-4 block text-sm underline" href="/setup">Create or join an organization</a>
                 </div>
                 )}
             </div>

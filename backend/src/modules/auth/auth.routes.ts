@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 import { Router, type Response } from "express";
 import { clearRequestAuthCookies, createRequestAuthSession, publicAuthUser } from "../../lib/authSession";
 import { requireAuth } from "../../middleware/auth";
@@ -27,7 +27,7 @@ authRouter.post("/login", requireTrustedOrigin, asyncRoute(async (req, res) => {
   res.json({ user: publicAuthUser(data.user) });
 }));
 
-if (process.env.NODE_ENV !== "production") {
+if (process.env.NODE_ENV !== "production" && process.env.AXERLY_PACKAGED !== "true") {
   authRouter.post("/dev/bootstrap", requireTrustedOrigin, asyncRoute(async (req, res) => {
     const parsed = credentialsSchema.safeParse(req.body);
     if (!parsed.success) return invalid(res);

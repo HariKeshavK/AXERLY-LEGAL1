@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 import { createHmac, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import type { QueryResult } from "pg";
 
@@ -12,7 +12,7 @@ function derive(password: string, salt: Buffer, length: number, options: { N: nu
   return new Promise((resolve, reject) => scryptCallback(password, salt, length, options, (error, key) => error ? reject(error) : resolve(key)));
 }
 
-export interface AuthUser { id: string; email: string; role: "admin" | "member"; status: "active" | "disabled"; }
+export interface AuthUser { id: string; email: string; role: "admin" | "member"; status: "active" | "disabled"; must_change_password?: boolean; }
 export interface AuthSession { access_token: string; refresh_token: string; expires_at: number; csrf_token: string; user: AuthUser; }
 export interface AuthError extends Error { status: number; code: string; }
 type Query = <T extends Record<string, unknown> = Record<string, unknown>>(text: string, values?: unknown[]) => Promise<QueryResult<T>>;
@@ -42,7 +42,8 @@ export async function verifyPassword(encoded: string, password: string): Promise
 }
 
 function asUser(row: Record<string, unknown>): AuthUser {
-  return { id: String(row.id), email: String(row.email), role: row.role === "admin" ? "admin" : "member", status: row.status === "disabled" ? "disabled" : "active" };
+  return { id: String(row.id), email: String(row.email), role: row.role === "admin" ? "admin" : "member", status: row.status === "disabled" ? "disabled" : "active",
+    ...(row.must_change_password === true ? { must_change_password: true } : {}) };
 }
 let dummyPasswordHash: Promise<string> | undefined;
 function dummyHash(): Promise<string> { return dummyPasswordHash ??= hashPassword("not-a-real-password-value"); }
@@ -79,7 +80,7 @@ export class LocalAuthApi {
   }
 
   async signInWithPassword(credentials: { email: string; password: string }) {
-    const result = await this.query("select id,email,password_hash,role,status,locked_until from public.users where email=$1", [credentials.email.trim().toLowerCase()]);
+    const result = await this.query("select id,email,password_hash,role,status,locked_until,must_change_password from public.users where email=$1", [credentials.email.trim().toLowerCase()]);
     const row = result.rows[0];
     const valid = await verifyPassword(row ? String(row.password_hash) : await dummyHash(), credentials.password);
     const locked = !!row?.locked_until && new Date(String(row.locked_until)).getTime() > Date.now();
@@ -95,7 +96,7 @@ export class LocalAuthApi {
   async getUser(explicitToken?: string) {
     const token = explicitToken || this.transport?.get() || "";
     if (!token) return { data: { user: null, sessionRow: null }, error: null };
-    const result = await this.query("update public.sessions s set last_seen_at=now(),idle_expires_at=least(now()+($2::text || ' minutes')::interval,absolute_expires_at) from public.users u where s.user_id=u.id and s.token_hash=$1 and s.revoked_at is null and s.idle_expires_at>now() and s.absolute_expires_at>now() and u.status='active' returning u.id,u.email,u.role,u.status,s.absolute_expires_at,s.csrf_token_hash", [sessionTokenHash(token), IDLE_MINUTES]);
+    const result = await this.query("update public.sessions s set last_seen_at=now(),idle_expires_at=least(now()+($2::text || ' minutes')::interval,absolute_expires_at) from public.users u where s.user_id=u.id and s.token_hash=$1 and s.revoked_at is null and s.idle_expires_at>now() and s.absolute_expires_at>now() and u.status='active' returning u.id,u.email,u.role,u.status,u.must_change_password,s.absolute_expires_at,s.csrf_token_hash", [sessionTokenHash(token), IDLE_MINUTES]);
     return { data: { user: result.rows[0] ? asUser(result.rows[0]) : null, sessionRow: result.rows[0] ?? null }, error: null };
   }
 
@@ -128,7 +129,7 @@ export class LocalAuthApi {
   async updateUser(values: { email?: string; password?: string }) {
     const current = await this.getUser();
     if (!current.data.user) return { data: { user: null }, error: failure(401, "invalid_session", "Invalid or expired session.") };
-    if (values.password) await this.query("update public.users set password_hash=$1 where id=$2", [await hashPassword(values.password), current.data.user.id]);
+    if (values.password) await this.query("update public.users set password_hash=$1,must_change_password=false where id=$2", [await hashPassword(values.password), current.data.user.id]);
     if (values.email) await this.query("update public.users set email=$1 where id=$2", [values.email.trim().toLowerCase(), current.data.user.id]);
     return { data: { user: current.data.user }, error: null };
   }

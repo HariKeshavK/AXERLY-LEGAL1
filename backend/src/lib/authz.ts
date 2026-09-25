@@ -1,4 +1,4 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 // The only public authorization boundary for backend feature modules.
 // Implementation files remain separate to keep each policy area testable.
 export type AuthzAction = "session:use" | "read" | "create" | "update" | "delete" | "share" | "admin";
@@ -21,7 +21,8 @@ export function can(userOrRole: AuthzUser | ProjectRole | null | undefined, acti
       return resource.accessRole === "owner";
     return false;
   }
-  if (user.role === "admin") return true;
+  // Firm administration is not a blanket right to private legal content.
+  if (user.role === "admin" && resource.kind === "system") return true;
   if (resource.kind === "user") return resource.ownerId === user.id && action !== "admin";
   const access = resource.accessRole;
   if (!access) return false;

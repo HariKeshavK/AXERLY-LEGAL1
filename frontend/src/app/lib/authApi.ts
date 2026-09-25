@@ -1,9 +1,10 @@
-// AXERLY modified 2026-09-24.
+// AXERLY modified 2026-09-24; AXERLY modified 2026-09-25.
 export interface AuthUser {
     id: string;
     email: string;
     role: "admin" | "member";
     status: "active" | "disabled";
+    must_change_password?: boolean;
 }
 export interface MfaFactor {
     id: string;
