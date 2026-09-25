@@ -16,6 +16,8 @@ vi.mock("../../licensing/licenseClient", () => ({
 
 import { createFirstFirm, registerWithJoinToken, verifyJoin } from "./onboarding.service";
 import { changeUserRole, disableUser, temporaryPassword, transferOwnership } from "../admin/admin.service";
+import { adminAudit } from "../admin/admin.service";
+import { writeSecurityEvent } from "../../middleware/securityAudit";
 
 describe("P6 onboarding on bundled PostgreSQL", () => {
   let tempDir: string;
@@ -121,5 +123,14 @@ describe("P6 onboarding on bundled PostgreSQL", () => {
     expect(moved.rows[0].user_id).toBe(adminId);
     const audit = await databasePool().query("select action from public.audit_events where action='resource.ownership_transferred' and user_id=$1", [adminId]);
     expect(audit.rowCount).toBe(1);
+  });
+  it("records anonymous failures with a one-way IP hash and exposes no request body", async () => {
+    await writeSecurityEvent({ action: "join.verify", ip: "198.51.100.99", status: 400 });
+    const rows = await databasePool().query("select actor_id,ip_hash,action,http_status from public.security_audit_events where action='join.verify'");
+    expect(rows.rows[0]).toMatchObject({ actor_id: null, action: "join.verify", http_status: 400 });
+    expect(rows.rows[0].ip_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(rows.rows)).not.toContain("198.51.100.99");
+    const feed = await adminAudit();
+    expect(feed.some((row: { action: string }) => row.action === "join.verify")).toBe(true);
   });
 });

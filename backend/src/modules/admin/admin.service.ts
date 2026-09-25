@@ -95,10 +95,15 @@ export async function firmDetails() {
 }
 export async function adminAudit() {
   const id = await firmId();
-  const result = await databasePool().query(`select a.id,a.created_at,a.user_id,a.user_email,a.action,a.status,a.surface,
-    coalesce(a.detail->>'target_id',a.detail->>'resource_id') as target_id
+  const result = await databasePool().query(`select * from (
+    select 'audit:'||a.id::text as id,a.created_at,a.user_id,a.user_email,a.action,a.status,a.surface,
+      coalesce(a.detail->>'target_id',a.detail->>'resource_id') as target_id
     from public.audit_events a where a.user_id in(select user_id from public.org_members where org_id=$1)
-    order by a.created_at desc limit 200`, [id]);
+    union all
+    select 'security:'||s.id::text as id,s.created_at,s.actor_id as user_id,u.email as user_email,
+      s.action, s.http_status::text as status,'security'::text as surface,s.target_id
+    from public.security_audit_events s left join public.users u on u.id=s.actor_id
+  ) events order by created_at desc limit 200`, [id]);
   return result.rows;
 }
 // Organization-scoped user_id is provenance, not ownership. Only standalone

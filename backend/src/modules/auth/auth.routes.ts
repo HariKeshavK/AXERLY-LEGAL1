@@ -24,6 +24,7 @@ authRouter.post("/login", requireTrustedOrigin, asyncRoute(async (req, res) => {
   if (!parsed.success) return invalid(res);
   const { data, error } = await signInWithPassword(createRequestAuthSession(req, res), parsed.data);
   if (error || !data.user || !data.session) return authFailure(res, error);
+  res.locals.userId = data.user.id;
   res.json({ user: publicAuthUser(data.user) });
 }));
 

@@ -8,7 +8,7 @@ type User = { id: string; email: string; role: "admin" | "member"; status: strin
 type Team = { id: string; name: string };
 type TeamMember = { user_id: string; email: string };
 type Firm = { name: string; org_code: string };
-type Audit = { id: string; created_at: string; user_email: string | null; action: string; surface: string; target_id: string | null };
+type Audit = { id: string; created_at: string; user_email: string | null; action: string; status: string; surface: string; target_id: string | null };
 type License = { state: "active" | "read_only" | "unactivated"; plan?: string; max_users?: number; expires_at?: string; code?: string };
 
 export default function AdminPage() {
@@ -101,6 +101,6 @@ export default function AdminPage() {
                 void act(() => onboardingRequest<{ code: string; password: string }>("/admin/firm/rotate-join", "POST"), value => {
                     const credentials = value as { code: string; password: string }; return `Code: ${credentials.code}\nPassword: ${credentials.password}`;
                 }); }}>Rotate joining details</button></div>}
-        {tab === "audit" && <div className="space-y-2">{audit.map(item => <p key={item.id}>{new Date(item.created_at).toLocaleString()} · {item.user_email ?? "System"} · {item.action}{item.target_id ? ` · ${item.target_id}` : ""} ({item.surface})</p>)}</div>}
+        {tab === "audit" && <div className="space-y-2">{audit.map(item => <p key={item.id}>{new Date(item.created_at).toLocaleString()} · {item.user_email ?? "Anonymous/System"} · {item.action}{item.target_id ? ` · ${item.target_id}` : ""} · {item.status} ({item.surface})</p>)}</div>}
     </main>;
 }

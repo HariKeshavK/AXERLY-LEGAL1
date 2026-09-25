@@ -39,6 +39,6 @@
 
 - P13 host/TLS bootstrap must supply actual LAN hostnames/IPs, port, and pinned public-key fingerprint to the setup invite details. P6 deliberately does not invent a network identity before a host exists.
 - P7 must enforce model entitlements in the single provider gate. A newly joined member gets no team, but the legacy model-call paths do not yet uniformly deny a teamless member.
-- Complete the firm-wide security audit feed for authentication failures, join attempts, shares, provider-key changes, file downloads, and blocked model calls. The P6 panel currently exposes existing `audit_events` plus role, reset, join-success, and ownership events, but not every requested category.
+- The P6 security-event ledger now records status-only auth/join attempts, common sharing routes, provider-key changes, file reads, and failed chat requests alongside existing `audit_events`. Finish endpoint-by-endpoint coverage review when P7 adds team sharing and the single model-entitlement gate; decide an audit retention period with counsel.
 - Perform a real activation/renewal smoke test with a separately issued test license key before production distribution; the app's public-key verifier and bundled-Postgres integration are tested locally, but no private license key was placed in this repository.
 - Add a safe public-verification-key rotation mechanism with overlap and recovery, so a signing-key change cannot strand installed clients.

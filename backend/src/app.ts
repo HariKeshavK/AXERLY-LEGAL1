@@ -42,6 +42,7 @@ import { licenseWriteGate } from "./middleware/licenseGate";
 import { onboardingRouter } from "./modules/onboarding/onboarding.routes";
 import { adminRouter } from "./modules/admin/admin.routes";
 import { licenseRouter } from "./licensing/license.routes";
+import { securityAuditBoundary } from "./middleware/securityAudit";
 
 export const app = express();
 const isProduction = process.env.NODE_ENV === "production";
@@ -217,6 +218,7 @@ app.use(
   }),
 );
 
+app.use(securityAuditBoundary);
 app.use(generalLimiter);
 // AXERLY modified 2026-09-24: all routes below are authenticated unless they
 // are named in the explicit public allowlist.

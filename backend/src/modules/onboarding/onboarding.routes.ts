@@ -45,6 +45,7 @@ onboardingRouter.post("/setup/create", requireTrustedOrigin, asyncRoute(async (r
     const result = await createFirstFirm(parsed.data);
     const signedIn = await createRequestAuthSession(req, res).auth.signInWithPassword(parsed.data);
     if (signedIn.error || !signedIn.data.user) throw new Error("Created administrator could not sign in");
+    res.locals.userId = signedIn.data.user.id;
     res.status(201).json({ org_id: result.orgId, join: result.credentials, user: publicAuthUser(signedIn.data.user) });
   } catch (error) { fail(res, error); }
 }));
@@ -61,6 +62,7 @@ onboardingRouter.post("/register", requireTrustedOrigin, asyncRoute(async (req, 
     await registerWithJoinToken({ token: parsed.data.join_token, email: parsed.data.email, password: parsed.data.password, ip: req.ip ?? "unknown" });
     const signedIn = await createRequestAuthSession(req, res).auth.signInWithPassword(parsed.data);
     if (signedIn.error || !signedIn.data.user) throw new Error("Registered member could not sign in");
+    res.locals.userId = signedIn.data.user.id;
     res.status(201).json({ user: publicAuthUser(signedIn.data.user) });
   } catch (error) { fail(res, error); }
 }));
